@@ -39,6 +39,7 @@ import { SupabaseService } from '@/utils/supabaseService';
 import ContentGenerationModal from '@/components/ui/ContentGenerationModal';
 import PDFUploadModal from '@/components/ui/PDFUploadModal';
 import CameraScanModal from '@/components/ui/CameraScanModal';
+import YouTubeInputModal from '@/components/ui/YouTubeInputModal';
 
 const { width } = Dimensions.get('window');
 
@@ -76,6 +77,7 @@ export default function Learn() {
   const [showTextModal, setShowTextModal] = useState(false);
   const [showPDFModal, setShowPDFModal] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const fadeIn = useSharedValue(0);
@@ -265,6 +267,141 @@ export default function Learn() {
     }
   };
 
+  const handleCreateFromYouTube = async (config: any) => {
+    console.log('📺 LEARN - handleCreateFromYouTube called');
+    console.log('📋 Received config:', config);
+    
+    try {
+      setIsProcessing(true);
+      console.log('⏳ Processing YouTube video...');
+      
+      // Check if user is authenticated
+      const user = await SupabaseService.getCurrentUser();
+      if (!user) {
+        Alert.alert('Authentication Required', 'Please log in to create content.');
+        return;
+      }
+      
+      // Call YouTube processing edge function
+      const result = await SupabaseService.callEdgeFunction('process-youtube', config);
+      
+      console.log('✅ YouTube processing result:', result);
+      
+      const missionId = result?.mission?.id;
+      
+      if (missionId) {
+        setShowYouTubeModal(false);
+        
+        // Navigate to content viewer
+        console.log('🚀 Navigating to content viewer with ID:', missionId);
+        
+        setTimeout(() => {
+          router.push({
+            pathname: '/learn/content-viewer',
+            params: {
+              contentId: missionId,
+              contentType: 'youtube',
+              source: 'youtube-video',
+            },
+          });
+        }, 500);
+      } else {
+        throw new Error('No mission ID returned from YouTube processing');
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing YouTube video:', error);
+      Alert.alert('Error', `Failed to process video: ${(error as any)?.message || 'Unknown error'}`);
+    } finally {
+      if (isMounted.current) {
+        setIsProcessing(false);
+        console.log('⏹️ YouTube processing finished');
+      }
+    }
+  };
+
+  const handleCreateFromPDF = async (config: any) => {
+    console.log('📄 LEARN - handleCreateFromPDF called');
+    
+    try {
+      setIsProcessing(true);
+      
+      const user = await SupabaseService.getCurrentUser();
+      if (!user) {
+        Alert.alert('Authentication Required', 'Please log in to create content.');
+        return;
+      }
+      
+      const result = await SupabaseService.callEdgeFunction('process-pdf', config);
+      
+      const missionId = result?.mission?.id;
+      
+      if (missionId) {
+        setShowPDFModal(false);
+        
+        setTimeout(() => {
+          router.push({
+            pathname: '/learn/content-viewer',
+            params: {
+              contentId: missionId,
+              contentType: 'pdf',
+              source: 'pdf-document',
+            },
+          });
+        }, 500);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing PDF:', error);
+      Alert.alert('Error', `Failed to process PDF: ${(error as any)?.message || 'Unknown error'}`);
+    } finally {
+      if (isMounted.current) {
+        setIsProcessing(false);
+      }
+    }
+  };
+
+  const handleCreateFromCamera = async (config: any) => {
+    console.log('📸 LEARN - handleCreateFromCamera called');
+    
+    try {
+      setIsProcessing(true);
+      
+      const user = await SupabaseService.getCurrentUser();
+      if (!user) {
+        Alert.alert('Authentication Required', 'Please log in to create content.');
+        return;
+      }
+      
+      const result = await SupabaseService.callEdgeFunction('process-image-ocr', config);
+      
+      const missionId = result?.mission?.id;
+      
+      if (missionId) {
+        setShowCameraModal(false);
+        
+        setTimeout(() => {
+          router.push({
+            pathname: '/learn/content-viewer',
+            params: {
+              contentId: missionId,
+              contentType: 'camera',
+              source: 'scanned-notes',
+            },
+          });
+        }, 500);
+      }
+      
+    } catch (error) {
+      console.error('❌ Error processing scanned image:', error);
+      Alert.alert('Error', `Failed to process image: ${(error as any)?.message || 'Unknown error'}`);
+    } finally {
+      if (isMounted.current) {
+        setIsProcessing(false);
+      }
+    }
+  };
+
   const quickActions: QuickAction[] = [
     {
       id: 'daily',
@@ -273,6 +410,14 @@ export default function Learn() {
       icon: 'play-circle',
       color: theme.colors.accent.purple,
       onPress: () => router.push('/quiz/daily'),
+    },
+    {
+      id: 'youtube',
+      title: 'YouTube Video',
+      subtitle: 'Convert educational videos to missions',
+      icon: 'youtube',
+      color: '#dc2626',
+      onPress: () => setShowYouTubeModal(true),
     },
     {
       id: 'upload-pdf',
@@ -494,19 +639,22 @@ export default function Learn() {
       <PDFUploadModal
         visible={showPDFModal}
         onClose={() => setShowPDFModal(false)}
-        onSuccess={(missionId) => {
-          setShowPDFModal(false);
-          // Navigate to mission
-        }}
+        onGenerate={handleCreateFromPDF}
+        isLoading={isProcessing}
       />
 
       <CameraScanModal
         visible={showCameraModal}
         onClose={() => setShowCameraModal(false)}
-        onSuccess={(missionId) => {
-          setShowCameraModal(false);
-          // Navigate to mission
-        }}
+        onGenerate={handleCreateFromCamera}
+        isLoading={isProcessing}
+      />
+
+      <YouTubeInputModal
+        visible={showYouTubeModal}
+        onClose={() => setShowYouTubeModal(false)}
+        onGenerate={handleCreateFromYouTube}
+        isLoading={isProcessing}
       />
     </SafeAreaView>
   );

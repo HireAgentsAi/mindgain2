@@ -1,4 +1,5 @@
-import { createClient } from 'npm:@supabase/supabase-js@2'
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,12 +8,14 @@ const corsHeaders = {
 }
 
 interface OCRRequest {
-  userId: string;
-  imageBase64: string;
-  fileName?: string;
+  image_base64: string;
+  title?: string;
+  subject_name?: string;
+  difficulty?: 'easy' | 'medium' | 'hard';
+  exam_focus?: string;
 }
 
-Deno.serve(async (req) => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -23,73 +26,123 @@ Deno.serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    const { userId, imageBase64, fileName }: OCRRequest = await req.json()
-
-    if (!userId || !imageBase64) {
-      throw new Error('User ID and image data are required')
+    // Get user from auth header
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      throw new Error('No authorization header')
     }
 
-    // Extract text from image using OpenAI Vision API
-    const extractedText = await extractTextFromImage(imageBase64)
+    const token = authHeader.replace('Bearer ', '')
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token)
+    
+    if (authError || !user) {
+      throw new Error('Invalid token')
+    }
+
+    const {
+      image_base64,
+      title,
+      subject_name = 'General',
+      difficulty = 'medium',
+      exam_focus = 'upsc'
+    }: OCRRequest = await req.json()
+
+    if (!image_base64) {
+      throw new Error('Image data is required')
+    }
+
+    console.log('📸 Processing scanned image with OCR...')
+
+    // Extract text from image using Google Vision API
+    const extractedText = await extractTextFromImage(image_base64)
     
     if (!extractedText || extractedText.length < 50) {
-      throw new Error('Could not extract sufficient text from image')
+      throw new Error('Could not extract sufficient text from image. Please ensure the image contains clear, readable text.')
     }
 
-    // Generate learning content using AI
-    const learningContent = await generateLearningContent(extractedText, fileName || 'Scanned Image')
+    console.log('✅ Text extracted from image, length:', extractedText.length)
 
-    // Create mission in database
+    // Create mission with scanned content
     const { data: mission, error: missionError } = await supabaseClient
       .from('missions')
       .insert({
-        user_id: userId,
-        title: `Camera Scan: ${fileName || 'Study Notes'}`,
-        description: `Learning mission generated from scanned image`,
+        user_id: user.id,
+        title: title || `Scanned Notes - ${new Date().toLocaleDateString()}`,
+        description: `Learning mission generated from scanned study material`,
         content_type: 'camera',
         content_text: extractedText.substring(0, 5000),
-        difficulty: 'medium',
-        estimated_time: Math.min(Math.max(Math.floor(extractedText.length / 80), 10), 45),
+        subject_name,
+        difficulty,
+        status: 'active',
+        estimated_time: Math.min(Math.max(Math.floor(extractedText.length / 150), 10), 45),
         xp_reward: 120,
-        tags: ['camera', 'scan', 'notes']
+        tags: ['camera', 'scan', 'notes', exam_focus]
       })
       .select()
       .single()
 
-    if (missionError) throw missionError
+    if (missionError) {
+      throw missionError
+    }
 
-    // Store learning content for each room
-    const contentPromises = Object.entries(learningContent).map(([roomType, content]) =>
-      supabaseClient
-        .from('learning_content')
-        .insert({
-          mission_id: mission.id,
-          room_type: roomType,
-          content_data: content
-        })
-    )
+    console.log('✅ Mission created:', mission.id)
 
-    await Promise.all(contentPromises)
+    // Generate AI content from extracted text
+    const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
+    if (openaiApiKey) {
+      try {
+        console.log('🤖 Generating AI content from scanned text...')
+        
+        const aiContent = await generateLearningContent(
+          extractedText,
+          'camera',
+          subject_name,
+          openaiApiKey,
+          exam_focus
+        )
+
+        // Store learning content
+        await supabaseClient
+          .from('learning_content')
+          .insert({
+            mission_id: mission.id,
+            room_type: 'clarity',
+            content_data: aiContent
+          })
+
+        // Generate other room content
+        await Promise.all([
+          generateFlashcards(mission.id, extractedText, aiContent, supabaseClient, openaiApiKey),
+          generateQuizQuestions(mission.id, extractedText, aiContent, supabaseClient, openaiApiKey),
+          generateTestQuestions(mission.id, extractedText, aiContent, supabaseClient, openaiApiKey)
+        ])
+
+        console.log('✅ All AI content generated successfully')
+      } catch (aiError) {
+        console.error('AI generation error:', aiError)
+        // Continue without AI content
+      }
+    }
 
     return new Response(
       JSON.stringify({
         success: true,
-        extractedText: extractedText.substring(0, 500) + '...',
-        mission: {
-          id: mission.id,
-          title: mission.title,
-          description: mission.description,
-          estimated_time: mission.estimated_time,
-          xp_reward: mission.xp_reward
-        }
+        mission,
+        extracted_text_preview: extractedText.substring(0, 500) + '...',
+        text_length: extractedText.length,
+        message: 'Image processed successfully with OCR'
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
     )
 
   } catch (error) {
     console.error('Error processing image OCR:', error)
     return new Response(
-      JSON.stringify({ error: error.message || 'Failed to process image' }),
+      JSON.stringify({ 
+        error: error.message || 'Failed to process image' 
+      }),
       { 
         status: 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -99,13 +152,68 @@ Deno.serve(async (req) => {
 })
 
 async function extractTextFromImage(imageBase64: string): Promise<string> {
-  const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
+  const googleVisionApiKey = Deno.env.get('GOOGLE_VISION_API_KEY')
   
-  if (!openaiApiKey) {
-    throw new Error('OpenAI API key not configured')
+  if (!googleVisionApiKey) {
+    console.log('⚠️ Google Vision API key not found, using OpenAI Vision as fallback')
+    return await extractTextWithOpenAI(imageBase64)
   }
 
   try {
+    console.log('🔍 Using Google Vision API for OCR...')
+    
+    const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${googleVisionApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        requests: [
+          {
+            image: {
+              content: imageBase64
+            },
+            features: [
+              {
+                type: 'TEXT_DETECTION',
+                maxResults: 1
+              }
+            ]
+          }
+        ]
+      })
+    })
+
+    if (!response.ok) {
+      throw new Error(`Google Vision API error: ${response.status}`)
+    }
+
+    const result = await response.json()
+    const textAnnotations = result.responses[0]?.textAnnotations
+    
+    if (!textAnnotations || textAnnotations.length === 0) {
+      throw new Error('No text detected in image')
+    }
+
+    return textAnnotations[0].description || ''
+    
+  } catch (error) {
+    console.error('Google Vision API error:', error)
+    // Fallback to OpenAI Vision
+    return await extractTextWithOpenAI(imageBase64)
+  }
+}
+
+async function extractTextWithOpenAI(imageBase64: string): Promise<string> {
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
+  
+  if (!openaiApiKey) {
+    throw new Error('No OCR API keys configured')
+  }
+
+  try {
+    console.log('🔍 Using OpenAI Vision API for OCR...')
+    
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -120,7 +228,7 @@ async function extractTextFromImage(imageBase64: string): Promise<string> {
             content: [
               {
                 type: 'text',
-                text: 'Extract all text content from this image. Focus on educational content like notes, textbooks, or study materials. Return only the extracted text, maintaining structure and formatting.'
+                text: 'Extract all text content from this image. Focus on educational content like notes, textbooks, or study materials. Return only the extracted text, maintaining structure and formatting. If you see handwritten notes, transcribe them accurately.'
               },
               {
                 type: 'image_url',
@@ -145,84 +253,26 @@ async function extractTextFromImage(imageBase64: string): Promise<string> {
     return result.choices[0].message.content || ''
     
   } catch (error) {
-    console.error('OCR extraction error:', error)
-    throw new Error('Failed to extract text from image')
+    console.error('OpenAI Vision OCR error:', error)
+    throw new Error('Failed to extract text from image using OCR')
   }
 }
 
-async function generateLearningContent(text: string, fileName: string) {
-  const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
-  
-  if (!openaiApiKey) {
-    // Fallback content
-    return {
-      clarity: {
-        summary: `Summary of scanned content from ${fileName}`,
-        keyPoints: ['Key concept 1', 'Key concept 2', 'Key concept 3'],
-        examples: ['Example 1', 'Example 2']
-      },
-      quiz: [
-        {
-          question: 'What is the main topic in the scanned content?',
-          options: ['Option A', 'Option B', 'Option C', 'Option D'],
-          correct: 0,
-          explanation: 'This covers the main theme of the scanned material.'
-        }
-      ],
-      memory: [
-        {
-          front: 'Key Term',
-          back: 'Definition from scanned content'
-        }
-      ],
-      test: [
-        {
-          question: 'Analyze the main concepts from the scanned material',
-          type: 'long',
-          points: 20
-        }
-      ]
-    }
-  }
+async function generateLearningContent(
+  text: string,
+  contentType: string,
+  subject?: string,
+  apiKey?: string,
+  examFocus?: string
+) {
+  if (!apiKey) throw new Error('OpenAI API key not available')
 
-  const prompt = `Create educational content from this scanned text:
-
-Content: ${text.substring(0, 3000)}
-
-Generate learning material in JSON format:
-{
-  "clarity": {
-    "summary": "Clear summary",
-    "keyPoints": ["point1", "point2", "point3"],
-    "examples": ["example1", "example2"]
-  },
-  "quiz": [
-    {
-      "question": "Question text",
-      "options": ["A", "B", "C", "D"],
-      "correct": 0,
-      "explanation": "Why this is correct"
-    }
-  ],
-  "memory": [
-    {
-      "front": "Term/Concept",
-      "back": "Definition/Explanation"
-    }
-  ],
-  "test": [
-    {
-      "question": "Analysis question",
-      "type": "long",
-      "points": 20
-    }
-  ]
-}`
+  const examFocusPrompt = examFocus ? `Focus on ${examFocus.toUpperCase()} exam patterns.` : ''
 
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${openaiApiKey}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -230,11 +280,19 @@ Generate learning material in JSON format:
       messages: [
         {
           role: 'system',
-          content: 'You are an educational content generator. Create comprehensive learning materials from scanned documents.'
+          content: `You are an AI tutor creating educational content for Indian competitive exams. ${examFocusPrompt} Generate comprehensive learning material in JSON format:
+          {
+            "overview": "Brief overview (2-3 sentences)",
+            "key_points": ["point1", "point2", "point3"],
+            "concepts": [{"term": "Term", "definition": "Definition"}],
+            "examples": ["example1", "example2"],
+            "difficulty": "beginner|intermediate|advanced",
+            "estimated_time": "time in minutes"
+          }`
         },
         {
           role: 'user',
-          content: prompt
+          content: `Create learning content from: ${text.substring(0, 3000)}. Subject: ${subject || 'General'}. Content type: ${contentType}.`
         }
       ],
       temperature: 0.7,
@@ -248,4 +306,142 @@ Generate learning material in JSON format:
 
   const aiResponse = await response.json()
   return JSON.parse(aiResponse.choices[0].message.content)
+}
+
+async function generateFlashcards(
+  missionId: string,
+  text: string,
+  learningContent: any,
+  supabaseClient: any,
+  apiKey: string
+) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: `Create EXACTLY 8 flashcards. Return JSON array:
+          [{"front": "Question/Term", "back": "Answer/Definition", "category": "Category", "difficulty": "easy|medium|hard", "hint": "Optional hint"}]`
+        },
+        {
+          role: 'user',
+          content: `Create 8 flashcards from: ${text.substring(0, 2000)}`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 1500,
+    }),
+  })
+
+  if (response.ok) {
+    const aiResponse = await response.json()
+    const flashcards = JSON.parse(aiResponse.choices[0].message.content)
+    
+    await supabaseClient
+      .from('flashcards')
+      .insert(
+        flashcards.slice(0, 8).map((card: any) => ({
+          mission_id: missionId,
+          ...card
+        }))
+      )
+  }
+}
+
+async function generateQuizQuestions(
+  missionId: string,
+  text: string,
+  learningContent: any,
+  supabaseClient: any,
+  apiKey: string
+) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: `Create EXACTLY 6 multiple choice questions. Return JSON array:
+          [{"question": "Question text", "options": ["A", "B", "C", "D"], "correct_answer": 0, "explanation": "Why correct", "difficulty": "easy|medium|hard", "points": 10}]`
+        },
+        {
+          role: 'user',
+          content: `Create 6 quiz questions from: ${text.substring(0, 2000)}`
+        }
+      ],
+      temperature: 0.8,
+      max_tokens: 1500,
+    }),
+  })
+
+  if (response.ok) {
+    const aiResponse = await response.json()
+    const questions = JSON.parse(aiResponse.choices[0].message.content)
+    
+    await supabaseClient
+      .from('quiz_questions')
+      .insert(
+        questions.slice(0, 6).map((q: any) => ({
+          mission_id: missionId,
+          ...q
+        }))
+      )
+  }
+}
+
+async function generateTestQuestions(
+  missionId: string,
+  text: string,
+  learningContent: any,
+  supabaseClient: any,
+  apiKey: string
+) {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: `Create 5 test questions (mix of MCQ and short answer). Return JSON array:
+          [{"question": "Question", "question_type": "mcq|short", "options": ["A","B","C","D"], "correct_answer": 0, "points": 10, "explanation": "Explanation", "difficulty": "easy|medium|hard"}]`
+        },
+        {
+          role: 'user',
+          content: `Create test questions from: ${text.substring(0, 2000)}`
+        }
+      ],
+      temperature: 0.8,
+      max_tokens: 2000,
+    }),
+  })
+
+  if (response.ok) {
+    const aiResponse = await response.json()
+    const questions = JSON.parse(aiResponse.choices[0].message.content)
+    
+    await supabaseClient
+      .from('test_questions')
+      .insert(
+        questions.slice(0, 5).map((q: any) => ({
+          mission_id: missionId,
+          ...q
+        }))
+      )
+  }
 }

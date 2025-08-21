@@ -1,20 +1,54 @@
 import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Modal, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Modal,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  TextInput,
+  ScrollView,
+  Pressable,
+} from 'react-native';
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
-import { X, Camera, RotateCcw, Check } from 'lucide-react-native';
-import { router } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
+import { X, Camera, RotateCcw, Check, Zap, BookOpen, Target, Clock } from 'lucide-react-native';
+import { theme } from '@/constants/theme';
+import GradientButton from './GradientButton';
 
 interface CameraScanModalProps {
   visible: boolean;
   onClose: () => void;
-  onSuccess: (missionId: string) => void;
+  onGenerate: (config: any) => void;
+  isLoading?: boolean;
 }
 
-export default function CameraScanModal({ visible, onClose, onSuccess }: CameraScanModalProps) {
+const examTypes = [
+  { id: 'upsc', title: 'UPSC', color: theme.colors.accent.purple },
+  { id: 'ssc', title: 'SSC', color: theme.colors.accent.blue },
+  { id: 'banking', title: 'Banking', color: theme.colors.accent.green },
+  { id: 'jee_neet', title: 'JEE/NEET', color: theme.colors.accent.yellow },
+  { id: 'state_pcs', title: 'State PCS', color: theme.colors.accent.pink },
+  { id: 'general', title: 'General', color: theme.colors.accent.cyan },
+];
+
+const subjects = [
+  'History', 'Polity', 'Geography', 'Economy', 
+  'Science & Technology', 'Current Affairs', 'Mathematics',
+  'Physics', 'Chemistry', 'Biology', 'English', 'General Studies'
+];
+
+export default function CameraScanModal(props: CameraScanModalProps) {
+  const { visible, onClose, onGenerate, isLoading } = props;
   const [facing, setFacing] = useState<CameraType>('back');
   const [permission, requestPermission] = useCameraPermissions();
-  const [isProcessing, setIsProcessing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [title, setTitle] = useState('');
+  const [selectedSubject, setSelectedSubject] = useState('General Studies');
+  const [selectedExam, setSelectedExam] = useState('general');
+  const [difficulty, setDifficulty] = useState('medium');
   const cameraRef = useRef<CameraView>(null);
 
   const takePicture = async () => {
@@ -28,6 +62,7 @@ export default function CameraScanModal({ visible, onClose, onSuccess }: CameraS
 
       if (photo?.base64) {
         setCapturedImage(photo.base64);
+        setShowConfig(true);
       }
     } catch (error) {
       console.error('Error taking picture:', error);
@@ -35,62 +70,38 @@ export default function CameraScanModal({ visible, onClose, onSuccess }: CameraS
     }
   };
 
-  const processCapturedImage = async () => {
+  const handleGenerate = async () => {
     if (!capturedImage) return;
 
-    setIsProcessing(true);
+    const config = {
+      image_base64: capturedImage,
+      title: title.trim() || `Scanned Notes - ${new Date().toLocaleDateString()}`,
+      subject_name: selectedSubject,
+      exam_focus: selectedExam,
+      difficulty,
+    };
 
-    try {
-      // Call edge function to process image
-      const response = await fetch(`${process.env.EXPO_PUBLIC_SUPABASE_URL}/functions/v1/process-image-ocr`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userId: 'current-user-id', // Replace with actual user ID
-          imageBase64: capturedImage,
-          fileName: `Scan_${new Date().toISOString().split('T')[0]}`,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process image');
-      }
-
-      Alert.alert(
-        'Success!',
-        `Extracted text and created mission: ${data.mission.title}`,
-        [
-          {
-            text: 'Start Learning',
-            onPress: () => {
-              onSuccess(data.mission.id);
-              router.push(`/mission/clarity?id=${data.mission.id}`);
-            }
-          }
-        ]
-      );
-
-    } catch (error) {
-      console.error('Image processing error:', error);
-      Alert.alert('Error', 'Failed to process image. Please try again.');
-    } finally {
-      setIsProcessing(false);
-      setCapturedImage(null);
-    }
+    await onGenerate(config);
+    
+    // Reset form
+    setCapturedImage(null);
+    setShowConfig(false);
+    setTitle('');
+    setSelectedSubject('General Studies');
+    setSelectedExam('general');
+    setDifficulty('medium');
   };
 
   const retakePicture = () => {
     setCapturedImage(null);
+    setShowConfig(false);
   };
 
   const toggleCameraFacing = () => {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
+
+  if (!visible) return null;
 
   if (!permission) {
     return null;
@@ -104,17 +115,19 @@ export default function CameraScanModal({ visible, onClose, onSuccess }: CameraS
             <View style={styles.header}>
               <Text style={styles.title}>Camera Permission</Text>
               <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-                <X size={24} color="#666" />
+                <X size={24} color={theme.colors.text.secondary} />
               </TouchableOpacity>
             </View>
             <View style={styles.content}>
-              <Camera size={64} color="#8b5cf6" style={styles.icon} />
+              <Camera size={64} color={theme.colors.accent.green} style={styles.icon} />
               <Text style={styles.description}>
-                We need camera permission to scan your study materials
+                We need camera permission to scan your study materials and convert them into interactive learning missions.
               </Text>
-              <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-                <Text style={styles.permissionButtonText}>Grant Permission</Text>
-              </TouchableOpacity>
+              <GradientButton
+                title="Grant Camera Permission"
+                onPress={requestPermission}
+                colors={[theme.colors.accent.green, theme.colors.accent.cyan]}
+              />
             </View>
           </View>
         </View>
@@ -125,46 +138,144 @@ export default function CameraScanModal({ visible, onClose, onSuccess }: CameraS
   return (
     <Modal visible={visible} transparent animationType="slide">
       <View style={styles.fullScreenOverlay}>
-        <View style={styles.cameraHeader}>
-          <TouchableOpacity onPress={onClose} style={styles.headerButton}>
-            <X size={24} color="white" />
-          </TouchableOpacity>
-          <Text style={styles.cameraTitle}>Scan Study Material</Text>
-          <TouchableOpacity onPress={toggleCameraFacing} style={styles.headerButton}>
-            <RotateCcw size={24} color="white" />
-          </TouchableOpacity>
-        </View>
+        {showConfig ? (
+          // Configuration Screen
+          <View style={styles.configContainer}>
+            <LinearGradient
+              colors={[theme.colors.background.card, theme.colors.background.secondary]}
+              style={styles.configModal}
+            >
+              <View style={styles.header}>
+                <Text style={styles.title}>Configure Scan</Text>
+                <TouchableOpacity onPress={retakePicture} style={styles.closeButton}>
+                  <RotateCcw size={24} color={theme.colors.text.secondary} />
+                </TouchableOpacity>
+              </View>
 
-        {capturedImage ? (
-          <View style={styles.previewContainer}>
-            <Text style={styles.previewText}>Image captured! Process to extract text?</Text>
-            <View style={styles.previewActions}>
-              <TouchableOpacity style={styles.retakeButton} onPress={retakePicture}>
-                <Text style={styles.retakeButtonText}>Retake</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.processButton, isProcessing && styles.processButtonDisabled]}
-                onPress={processCapturedImage}
-                disabled={isProcessing}
-              >
-                {isProcessing ? (
-                  <ActivityIndicator color="white" />
-                ) : (
-                  <Check size={20} color="white" />
-                )}
-                <Text style={styles.processButtonText}>
-                  {isProcessing ? 'Processing...' : 'Process'}
+              <ScrollView style={styles.configContent} showsVerticalScrollIndicator={false}>
+                <Text style={styles.configDescription}>
+                  ✅ Image captured! Configure your learning mission:
                 </Text>
-              </TouchableOpacity>
-            </View>
+
+                {/* Custom Title */}
+                <View style={styles.configSection}>
+                  <Text style={styles.configSectionTitle}>📝 Title (Optional)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="e.g., Chemistry Notes Chapter 5"
+                    placeholderTextColor={theme.colors.text.tertiary}
+                    value={title}
+                    onChangeText={setTitle}
+                  />
+                </View>
+
+                {/* Subject Selection */}
+                <View style={styles.configSection}>
+                  <Text style={styles.configSectionTitle}>📚 Subject</Text>
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.subjectsContainer}
+                  >
+                    {subjects.map((subject) => (
+                      <TouchableOpacity
+                        key={subject}
+                        style={[
+                          styles.subjectChip,
+                          selectedSubject === subject && styles.selectedSubject,
+                        ]}
+                        onPress={() => setSelectedSubject(subject)}
+                      >
+                        <Text style={[
+                          styles.subjectText,
+                          selectedSubject === subject && styles.selectedSubjectText,
+                        ]}>
+                          {subject}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+
+                {/* Exam Focus */}
+                <View style={styles.configSection}>
+                  <Text style={styles.configSectionTitle}>🎯 Exam Focus</Text>
+                  <View style={styles.examTypesContainer}>
+                    {examTypes.map((exam) => (
+                      <TouchableOpacity
+                        key={exam.id}
+                        style={[
+                          styles.examTypeChip,
+                          selectedExam === exam.id && styles.selectedExamType,
+                          { borderColor: selectedExam === exam.id ? exam.color : theme.colors.border.tertiary }
+                        ]}
+                        onPress={() => setSelectedExam(exam.id)}
+                      >
+                        <Text style={[
+                          styles.examTypeText,
+                          { color: selectedExam === exam.id ? exam.color : theme.colors.text.secondary }
+                        ]}>
+                          {exam.title}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+
+                {/* Features Info */}
+                <View style={styles.featuresSection}>
+                  <Text style={styles.featuresTitle}>✨ What You'll Get:</Text>
+                  <View style={styles.featuresList}>
+                    <View style={styles.featureItem}>
+                      <BookOpen size={16} color={theme.colors.accent.purple} />
+                      <Text style={styles.featureText}>OCR text extraction from your notes</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Target size={16} color={theme.colors.accent.blue} />
+                      <Text style={styles.featureText}>Interactive quiz questions</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <Clock size={16} color={theme.colors.accent.green} />
+                      <Text style={styles.featureText}>Flashcards for memorization</Text>
+                    </View>
+                  </View>
+                </View>
+              </ScrollView>
+
+              <View style={styles.configFooter}>
+                <GradientButton
+                  title={isLoading ? "Processing..." : "Process Scanned Content"}
+                  onPress={handleGenerate}
+                  size="large"
+                  fullWidth
+                  icon={isLoading ? 
+                    <ActivityIndicator size={20} color={theme.colors.text.primary} /> :
+                    <Zap size={20} color={theme.colors.text.primary} />
+                  }
+                  colors={[theme.colors.accent.green, theme.colors.accent.cyan]}
+                  disabled={isLoading}
+                />
+              </View>
+            </LinearGradient>
           </View>
         ) : (
+          // Camera Screen
           <>
+            <View style={styles.cameraHeader}>
+              <TouchableOpacity onPress={onClose} style={styles.headerButton}>
+                <X size={24} color="white" />
+              </TouchableOpacity>
+              <Text style={styles.cameraTitle}>Scan Study Material</Text>
+              <TouchableOpacity onPress={toggleCameraFacing} style={styles.headerButton}>
+                <RotateCcw size={24} color="white" />
+              </TouchableOpacity>
+            </View>
+
             <CameraView style={styles.camera} facing={facing} ref={cameraRef}>
               <View style={styles.cameraOverlay}>
                 <View style={styles.scanFrame} />
                 <Text style={styles.scanInstruction}>
-                  Position text within the frame
+                  Position text within the frame for best OCR results
                 </Text>
               </View>
             </CameraView>
@@ -175,6 +286,26 @@ export default function CameraScanModal({ visible, onClose, onSuccess }: CameraS
               </TouchableOpacity>
             </View>
           </>
+        )}
+
+        {/* Loading Overlay */}
+        {isLoading && (
+          <View style={styles.loadingOverlay}>
+            <LinearGradient
+              colors={[theme.colors.accent.green + 'E6', theme.colors.accent.cyan + 'E6']}
+              style={styles.loadingContainer}
+            >
+              <View style={styles.loadingContent}>
+                <ActivityIndicator size={60} color={theme.colors.text.primary} />
+                <Text style={styles.loadingTitle}>Processing Scanned Content</Text>
+                <Text style={styles.loadingSubtitle}>
+                  📸 Extracting text with OCR{'\n'}
+                  🧠 Analyzing content structure{'\n'}
+                  ✨ Creating learning materials
+                </Text>
+              </View>
+            </LinearGradient>
+          </View>
         )}
       </View>
     </Modal>
@@ -205,7 +336,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: theme.colors.border.tertiary,
   },
   cameraHeader: {
     flexDirection: 'row',
@@ -216,12 +347,12 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '600',
-    color: '#1a1a1a',
+    fontFamily: theme.fonts.heading,
+    color: theme.colors.text.primary,
   },
   cameraTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: theme.fonts.heading,
     color: 'white',
   },
   closeButton: {
@@ -241,21 +372,11 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 16,
-    color: '#666',
+    fontFamily: theme.fonts.body,
+    color: theme.colors.text.secondary,
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 22,
-  },
-  permissionButton: {
-    backgroundColor: '#8b5cf6',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
-  },
-  permissionButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
   },
   camera: {
     flex: 1,
@@ -269,7 +390,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 200,
     borderWidth: 2,
-    borderColor: '#8b5cf6',
+    borderColor: theme.colors.accent.green,
     borderRadius: 8,
     backgroundColor: 'transparent',
   },
@@ -298,58 +419,169 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 4,
-    borderColor: '#8b5cf6',
+    borderColor: theme.colors.accent.green,
   },
   captureButtonInner: {
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: theme.colors.accent.green,
   },
-  previewContainer: {
+  configContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
   },
-  previewText: {
-    color: 'white',
-    fontSize: 18,
-    textAlign: 'center',
-    marginBottom: 30,
-  },
-  previewActions: {
-    flexDirection: 'row',
-    gap: 16,
-  },
-  retakeButton: {
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+  configModal: {
+    width: '100%',
+    maxWidth: 500,
+    maxHeight: '90%',
+    borderRadius: theme.borderRadius.xl,
+    overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'white',
+    borderColor: theme.colors.border.primary,
   },
-  retakeButtonText: {
-    color: 'white',
+  configContent: {
+    flex: 1,
+    padding: theme.spacing.lg,
+  },
+  configDescription: {
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: theme.fonts.body,
+    color: theme.colors.text.primary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.xl,
   },
-  processButton: {
-    backgroundColor: '#8b5cf6',
+  configSection: {
+    marginBottom: theme.spacing.xl,
+  },
+  configSectionTitle: {
+    fontSize: 16,
+    fontFamily: theme.fonts.heading,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.md,
+  },
+  textInput: {
+    backgroundColor: theme.colors.background.tertiary,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    fontSize: 16,
+    fontFamily: theme.fonts.body,
+    color: theme.colors.text.primary,
+    borderWidth: 1,
+    borderColor: theme.colors.border.secondary,
+  },
+  subjectsContainer: {
+    flexDirection: 'row',
+  },
+  subjectChip: {
+    backgroundColor: theme.colors.background.tertiary,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.full,
+    marginRight: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border.tertiary,
+  },
+  selectedSubject: {
+    backgroundColor: theme.colors.accent.green + '20',
+    borderColor: theme.colors.accent.green,
+  },
+  subjectText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.subheading,
+    color: theme.colors.text.secondary,
+  },
+  selectedSubjectText: {
+    color: theme.colors.accent.green,
+  },
+  examTypesContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  examTypeChip: {
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+    borderRadius: theme.borderRadius.full,
+    borderWidth: 1,
+    backgroundColor: theme.colors.background.tertiary,
+  },
+  selectedExamType: {
+    backgroundColor: theme.colors.background.primary,
+  },
+  examTypeText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.subheading,
+  },
+  featuresSection: {
+    backgroundColor: theme.colors.background.tertiary,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border.secondary,
+  },
+  featuresTitle: {
+    fontSize: 16,
+    fontFamily: theme.fonts.heading,
+    color: theme.colors.text.primary,
+    marginBottom: theme.spacing.md,
+  },
+  featuresList: {
+    gap: theme.spacing.md,
+  },
+  featureItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 8,
+    gap: theme.spacing.sm,
   },
-  processButtonDisabled: {
-    backgroundColor: '#666',
+  featureText: {
+    fontSize: 14,
+    fontFamily: theme.fonts.body,
+    color: theme.colors.text.secondary,
+    flex: 1,
   },
-  processButtonText: {
-    color: 'white',
+  configFooter: {
+    padding: theme.spacing.lg,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border.tertiary,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  loadingContainer: {
+    width: '90%',
+    paddingVertical: theme.spacing.xxl,
+    paddingHorizontal: theme.spacing.xl,
+    borderRadius: theme.borderRadius.xl,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: theme.colors.border.primary,
+  },
+  loadingContent: {
+    alignItems: 'center',
+    gap: theme.spacing.lg,
+  },
+  loadingTitle: {
+    fontSize: 22,
+    fontFamily: theme.fonts.heading,
+    color: theme.colors.text.primary,
+    textAlign: 'center',
+    marginTop: theme.spacing.md,
+  },
+  loadingSubtitle: {
     fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
+    fontFamily: theme.fonts.body,
+    color: theme.colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });
