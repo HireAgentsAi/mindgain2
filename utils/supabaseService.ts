@@ -284,7 +284,7 @@ export class SupabaseService {
         .eq('user_id', userId)
         .eq('status', 'active')
         .gte('end_date', new Date().toISOString())
-        .single();
+        .maybeSingle();
 
       const isPremium = !!subscription;
 

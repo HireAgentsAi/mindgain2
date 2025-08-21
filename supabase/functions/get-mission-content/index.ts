@@ -248,7 +248,12 @@ serve(async (req) => {
 // Background content generation functions
 async function generateContentInBackground(supabaseClient: any, mission: any, userId: string, roomType: string | null) {
   try {
-    const claudeApiKey = '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';
+    const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
+    if (!claudeApiKey) {
+      console.log('⚠️ Claude API key not configured, skipping content generation');
+      return;
+    }
+    
     const contentToAnalyze = mission.content_text || mission.content_url || mission.title;
     
     // Generate content based on room type
@@ -275,7 +280,12 @@ async function generateContentInBackground(supabaseClient: any, mission: any, us
 
 async function generateQuizInBackground(supabaseClient: any, mission: any, userId: string) {
   try {
-    const claudeApiKey = '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';
+    const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
+    if (!claudeApiKey) {
+      console.log('⚠️ Claude API key not configured, skipping quiz generation');
+      return;
+    }
+    
     const contentToAnalyze = mission.content_text || mission.content_url || mission.title;
     
     // Get existing learning content
@@ -306,7 +316,12 @@ async function generateQuizInBackground(supabaseClient: any, mission: any, userI
 
 async function generateFlashcardsInBackground(supabaseClient: any, mission: any, userId: string) {
   try {
-    const claudeApiKey = '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';
+    const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
+    if (!claudeApiKey) {
+      console.log('⚠️ Claude API key not configured, skipping flashcards generation');
+      return;
+    }
+    
     const contentToAnalyze = mission.content_text || mission.content_url || mission.title;
     
     // Get existing learning content
@@ -337,7 +352,12 @@ async function generateFlashcardsInBackground(supabaseClient: any, mission: any,
 
 async function generateTestInBackground(supabaseClient: any, mission: any, userId: string) {
   try {
-    const claudeApiKey = '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';
+    const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
+    if (!claudeApiKey) {
+      console.log('⚠️ Claude API key not configured, skipping test generation');
+      return;
+    }
+    
     const contentToAnalyze = mission.content_text || mission.content_url || mission.title;
     
     // Get existing learning content

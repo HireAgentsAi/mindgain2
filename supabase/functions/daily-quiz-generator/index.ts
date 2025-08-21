@@ -167,9 +167,11 @@ Deno.serve(async (req: Request) => {
 async function generateDailyQuizWithAI(): Promise<DailyQuizQuestion[]> {
   const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  const grokApiKey = Deno.env.get('GROK_API_KEY');
   
-  if (!claudeApiKey && !openaiApiKey) {
-    throw new Error('No AI API keys configured');
+  if (!claudeApiKey && !openaiApiKey && !grokApiKey) {
+    console.log('⚠️ No AI API keys configured, using demo questions');
+    return generateDemoQuestions();
   }
 
   // Universal prompt for Indian competitive exam daily quiz
@@ -242,7 +244,18 @@ Points allocation: easy=5, medium=10, hard=15`;
     }
   }
 
-  throw new Error('All AI providers failed');
+  // Try Grok as final fallback
+  if (grokApiKey) {
+    try {
+      console.log('🤖 Generating questions with Grok...');
+      return await generateWithGrok(universalPrompt, grokApiKey);
+    } catch (grokError) {
+      console.log('⚠️ Grok failed:', grokError.message);
+    }
+  }
+
+  console.log('⚠️ All AI providers failed, using demo questions');
+  return generateDemoQuestions();
 }
 
 async function generateWithClaude(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
@@ -488,6 +501,186 @@ function generateDemoQuestions(): DailyQuizQuestion[] {
       difficulty: 'easy',
       points: 5,
       exam_relevance: 'Recent achievement frequently asked in current affairs'
+    }
+    {
+      id: 'demo6',
+      question: 'Who is known as the Father of the Indian Constitution?',
+      options: ['Mahatma Gandhi', 'B.R. Ambedkar', 'Jawaharlal Nehru', 'Sardar Patel'],
+      correct_answer: 1,
+      explanation: 'Dr. B.R. Ambedkar is known as the Father of the Indian Constitution for his role as chairman of the drafting committee.',
+      subject: 'Polity',
+      subtopic: 'Constitution',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Fundamental knowledge for all competitive exams'
+    },
+    {
+      id: 'demo7',
+      question: 'Which Indian state has the highest literacy rate?',
+      options: ['Kerala', 'Goa', 'Himachal Pradesh', 'Mizoram'],
+      correct_answer: 0,
+      explanation: 'Kerala has the highest literacy rate in India at over 93%.',
+      subject: 'Geography',
+      subtopic: 'Social Geography',
+      difficulty: 'medium',
+      points: 10,
+      exam_relevance: 'Important demographic data for competitive exams'
+    },
+    {
+      id: 'demo8',
+      question: 'What is the full form of GST?',
+      options: ['General Sales Tax', 'Goods and Services Tax', 'Government Service Tax', 'Global Sales Tax'],
+      correct_answer: 1,
+      explanation: 'GST stands for Goods and Services Tax, implemented in India in 2017.',
+      subject: 'Economy',
+      subtopic: 'Taxation',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Current economic policy important for all competitive exams'
+    },
+    {
+      id: 'demo9',
+      question: 'Which Indian scientist won the Nobel Prize in Physics in 1930?',
+      options: ['C.V. Raman', 'Homi Bhabha', 'A.P.J. Abdul Kalam', 'Vikram Sarabhai'],
+      correct_answer: 0,
+      explanation: 'C.V. Raman won the Nobel Prize in Physics in 1930 for his work on light scattering.',
+      subject: 'Science & Technology',
+      subtopic: 'Nobel Laureates',
+      difficulty: 'medium',
+      points: 10,
+      exam_relevance: 'Important scientific achievement frequently asked in exams'
+    },
+    {
+      id: 'demo10',
+      question: 'Which scheme was launched for financial inclusion of the poor?',
+      options: ['Jan Dhan Yojana', 'Ayushman Bharat', 'PM-KISAN', 'Swachh Bharat'],
+      correct_answer: 0,
+      explanation: 'Pradhan Mantri Jan Dhan Yojana was launched for financial inclusion and banking services for the poor.',
+      subject: 'Current Affairs',
+      subtopic: 'Government Schemes',
+      difficulty: 'medium',
+      points: 10,
+      exam_relevance: 'Important government initiative for competitive exams'
+    },
+    {
+      id: 'demo11',
+      question: 'In which year did India gain independence?',
+      options: ['1946', '1947', '1948', '1949'],
+      correct_answer: 1,
+      explanation: 'India gained independence from British rule on August 15, 1947.',
+      subject: 'History',
+      subtopic: 'Freedom Movement',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Fundamental historical fact for all competitive exams'
+    },
+    {
+      id: 'demo12',
+      question: 'Which mountain range separates India from China?',
+      options: ['Western Ghats', 'Eastern Ghats', 'Himalayas', 'Aravalli'],
+      correct_answer: 2,
+      explanation: 'The Himalayas form the natural boundary between India and China.',
+      subject: 'Geography',
+      subtopic: 'Physical Features',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Basic geographical knowledge for competitive exams'
+    },
+    {
+      id: 'demo13',
+      question: 'What is the currency of India?',
+      options: ['Dollar', 'Rupee', 'Pound', 'Euro'],
+      correct_answer: 1,
+      explanation: 'The Indian Rupee (INR) is the official currency of India.',
+      subject: 'Economy',
+      subtopic: 'Currency',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Basic economic knowledge for competitive exams'
+    },
+    {
+      id: 'demo14',
+      question: 'Which organization launched Chandrayaan-3?',
+      options: ['DRDO', 'ISRO', 'CSIR', 'DAE'],
+      correct_answer: 1,
+      explanation: 'ISRO (Indian Space Research Organisation) successfully launched Chandrayaan-3.',
+      subject: 'Science & Technology',
+      subtopic: 'Space Technology',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Recent achievement important for current affairs'
+    },
+    {
+      id: 'demo15',
+      question: 'Who is the current President of India (as of 2024)?',
+      options: ['Ram Nath Kovind', 'Droupadi Murmu', 'Pranab Mukherjee', 'A.P.J. Abdul Kalam'],
+      correct_answer: 1,
+      explanation: 'Droupadi Murmu is the current President of India, taking office in 2022.',
+      subject: 'Current Affairs',
+      subtopic: 'Government',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Current political knowledge for competitive exams'
+    },
+    {
+      id: 'demo16',
+      question: 'Which Mughal emperor built the Taj Mahal?',
+      options: ['Akbar', 'Shah Jahan', 'Aurangzeb', 'Humayun'],
+      correct_answer: 1,
+      explanation: 'Shah Jahan built the Taj Mahal in memory of his wife Mumtaz Mahal.',
+      subject: 'History',
+      subtopic: 'Mughal Empire',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Important historical monument frequently asked in exams'
+    },
+    {
+      id: 'demo17',
+      question: 'Which state in India has the largest area?',
+      options: ['Uttar Pradesh', 'Madhya Pradesh', 'Rajasthan', 'Maharashtra'],
+      correct_answer: 2,
+      explanation: 'Rajasthan is the largest state in India by area, covering 342,239 square kilometers.',
+      subject: 'Geography',
+      subtopic: 'Indian States',
+      difficulty: 'medium',
+      points: 10,
+      exam_relevance: 'Important geographical fact for competitive exams'
+    },
+    {
+      id: 'demo18',
+      question: 'What is the full form of RBI?',
+      options: ['Reserve Bank of India', 'Regional Bank of India', 'Rural Bank of India', 'Retail Bank of India'],
+      correct_answer: 0,
+      explanation: 'RBI stands for Reserve Bank of India, the central bank of the country.',
+      subject: 'Economy',
+      subtopic: 'Banking',
+      difficulty: 'easy',
+      points: 5,
+      exam_relevance: 'Fundamental banking knowledge for competitive exams'
+    },
+    {
+      id: 'demo19',
+      question: 'Which Indian satellite was used for the first successful Mars mission?',
+      options: ['Aryabhata', 'Mangalyaan', 'Chandrayaan', 'INSAT'],
+      correct_answer: 1,
+      explanation: 'Mangalyaan (Mars Orbiter Mission) was India\'s first successful Mars mission launched in 2013.',
+      subject: 'Science & Technology',
+      subtopic: 'Space Missions',
+      difficulty: 'medium',
+      points: 10,
+      exam_relevance: 'Important space achievement for current affairs'
+    },
+    {
+      id: 'demo20',
+      question: 'Which scheme provides cooking gas connections to poor households?',
+      options: ['Ujjwala Yojana', 'Swachh Bharat', 'Digital India', 'Make in India'],
+      correct_answer: 0,
+      explanation: 'Pradhan Mantri Ujjwala Yojana provides LPG connections to women from poor households.',
+      subject: 'Current Affairs',
+      subtopic: 'Government Schemes',
+      difficulty: 'medium',
+      points: 10,
+      exam_relevance: 'Important welfare scheme for competitive exams'
     }
   ];
 }

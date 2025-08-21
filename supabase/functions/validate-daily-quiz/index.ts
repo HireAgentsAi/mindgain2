@@ -162,7 +162,18 @@ async function performTraditionalValidation(questions: any[]): Promise<Validatio
 
 async function performAIValidation(questions: any[]) {
   try {
-    const claudeApiKey = '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'
+    const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
+    if (!claudeApiKey) {
+      console.log('⚠️ Claude API key not configured, using fallback validation');
+      return {
+        factual_accuracy_score: 75,
+        exam_relevance_score: 80,
+        explanation_quality_score: 70,
+        overall_ai_score: 75,
+        issues_found: ['AI validation unavailable - API key not configured'],
+        recommendations: ['Configure Claude API key for AI validation']
+      };
+    }
     
     const prompt = `As an expert in Indian competitive exams, validate these 10 daily quiz questions for factual accuracy and exam relevance:
 
