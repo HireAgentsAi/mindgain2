@@ -295,6 +295,23 @@ ${prompt}`
 
     const claudeResponse = await response.json();
     const content = JSON.parse(claudeResponse.content[0].text);
+    
+    // Validate and format questions
+    const questions = content.questions.map((q: any, index: number) => ({
+      id: `dq${index + 1}`,
+      question: q.question,
+      options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
+      correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
+      explanation: q.explanation || 'Explanation not available',
+      subject: q.subject || 'General',
+      subtopic: q.subtopic || 'General',
+      difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
+      points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
+      exam_relevance: q.exam_relevance
+    }));
+
+    console.log('✅ Generated', questions.length, 'questions with Claude');
+    return questions.slice(0, 20); // Ensure exactly 20 questions
   } catch (fetchError) {
     console.error('❌ Claude fetch error:', {
       message: fetchError.message,
@@ -378,6 +395,22 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
 
     console.log('✅ Generated', questions.length, 'questions with OpenAI');
     return questions.slice(0, 20); // Ensure exactly 20 questions
+    // Validate and format questions
+    const questions = content.questions.map((q: any, index: number) => ({
+      id: `dq${index + 1}`,
+      question: q.question,
+      options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
+      correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
+      explanation: q.explanation || 'Explanation not available',
+      subject: q.subject || 'General',
+      subtopic: q.subtopic || 'General',
+      difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
+      points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
+      exam_relevance: q.exam_relevance
+    }));
+
+    console.log('✅ Generated', questions.length, 'questions with OpenAI');
+    return questions.slice(0, 20); // Ensure exactly 20 questions
   } catch (fetchError) {
     console.error('❌ OpenAI fetch error:', {
       message: fetchError.message,
@@ -386,22 +419,6 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
     });
     throw new Error(`OpenAI API fetch failed: ${fetchError.message}`);
   }
-  // Validate and format questions
-  const questions = content.questions.map((q: any, index: number) => ({
-    id: `dq${index + 1}`,
-    question: q.question,
-    options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-    correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
-    explanation: q.explanation || 'Explanation not available',
-    subject: q.subject || 'General',
-    subtopic: q.subtopic || 'General',
-    difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
-    points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
-    exam_relevance: q.exam_relevance
-  }));
-
-  console.log('✅ Generated', questions.length, 'questions with OpenAI');
-  return questions.slice(0, 20); // Ensure exactly 20 questions
 }
 
 
