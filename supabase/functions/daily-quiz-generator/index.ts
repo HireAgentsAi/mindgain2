@@ -32,28 +32,23 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    // Get current date in Indian timezone
+    // Get Indian date (IST)
     const indianTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
     const today = new Date(indianTime).toISOString().split('T')[0];
     
     console.log('📅 Generating daily quiz for Indian date:', today);
 
-    // Initialize Supabase client with better error handling
+    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !supabaseServiceKey) {
-      console.error('❌ Missing Supabase configuration');
       throw new Error('Supabase configuration missing');
     }
     
-    console.log('🔗 Connecting to Supabase...');
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { persistSession: false }
-    });
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     // Check if quiz already exists for today
-    console.log('🔍 Checking for existing quiz...');
     const { data: existingQuiz, error: checkError } = await supabase
       .from('daily_quizzes')
       .select('*')
@@ -62,7 +57,6 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (checkError && checkError.code !== 'PGRST116') {
-      console.error('❌ Database check error:', checkError);
       throw new Error('Database check failed: ' + checkError.message);
     }
 
@@ -86,7 +80,7 @@ Deno.serve(async (req: Request) => {
 
     console.log('🤖 No valid quiz found, generating new one...');
 
-    // Generate new questions with better error handling
+    // Generate new questions
     const questions = await generateDailyQuizQuestions();
     
     if (!questions || questions.length === 0) {
@@ -114,45 +108,18 @@ Deno.serve(async (req: Request) => {
 
     console.log('💾 Saving daily quiz to database...');
 
-    // Save to database with retry logic
-    let savedQuiz;
-    let saveAttempts = 0;
-    const maxSaveAttempts = 3;
-    
-    while (saveAttempts < maxSaveAttempts) {
-      try {
-        const { data, error } = await supabase
-          .from('daily_quizzes')
-          .insert(dailyQuiz)
-          .select()
-          .single();
+    // Save to database
+    const { data: savedQuiz, error: saveError } = await supabase
+      .from('daily_quizzes')
+      .insert(dailyQuiz)
+      .select()
+      .single();
 
-        if (error) {
-          throw error;
-        }
-        
-        savedQuiz = data;
-        break;
-      } catch (saveError) {
-        saveAttempts++;
-        console.error(`❌ Save attempt ${saveAttempts} failed:`, saveError);
-        
-        if (saveAttempts >= maxSaveAttempts) {
-          throw new Error('Failed to save quiz after multiple attempts: ' + saveError.message);
-        }
-        
-        // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
-    }
-
-    if (!savedQuiz) {
-      throw new Error('Quiz was not saved properly');
+    if (saveError) {
+      throw new Error('Failed to save quiz: ' + saveError.message);
     }
 
     console.log('🎉 Daily quiz generated and saved successfully');
-    console.log('📊 Questions:', questions.length);
-    console.log('🎯 Subjects:', dailyQuiz.subjects_covered.join(', '));
 
     return new Response(
       JSON.stringify({
@@ -172,12 +139,10 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error('💥 Error in daily quiz generator:', error);
     
-    // Return a more detailed error response
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message || 'Failed to generate daily quiz',
-        error_type: error.name || 'UnknownError',
         timestamp: new Date().toISOString(),
         message: 'Daily quiz generation failed'
       }),
@@ -239,7 +204,7 @@ Return ONLY valid JSON in this exact format:
 
 Points allocation: easy=5, medium=10, hard=15`;
 
-  // Try Claude first with better error handling
+  // Try Claude first
   if (claudeApiKey) {
     try {
       console.log('🤖 Attempting generation with Claude...');
@@ -253,7 +218,7 @@ Points allocation: easy=5, medium=10, hard=15`;
     }
   }
 
-  // Try OpenAI with better error handling
+  // Try OpenAI
   if (openaiApiKey) {
     try {
       console.log('🤖 Attempting generation with OpenAI...');
@@ -267,7 +232,7 @@ Points allocation: easy=5, medium=10, hard=15`;
     }
   }
 
-  // Try Grok with better error handling
+  // Try Grok
   if (grokApiKey) {
     try {
       console.log('🤖 Attempting generation with Grok...');
@@ -310,7 +275,6 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('❌ Claude API error:', response.status, errorText);
     throw new Error("Claude API error: " + response.status + " - " + errorText);
   }
 
@@ -318,7 +282,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
   const content = JSON.parse(claudeResponse.content[0].text);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq_claude_${index + 1}`,
+    id: 'dq_claude_' + (index + 1),
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -360,7 +324,6 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('❌ OpenAI API error:', response.status, errorText);
     throw new Error("OpenAI API error: " + response.status + " - " + errorText);
   }
 
@@ -368,7 +331,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
   const content = JSON.parse(aiResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq_openai_${index + 1}`,
+    id: 'dq_openai_' + (index + 1),
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -409,7 +372,6 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('❌ Grok API error:', response.status, errorText);
     throw new Error("Grok API error: " + response.status + " - " + errorText);
   }
 
@@ -417,7 +379,7 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
   const content = JSON.parse(grokResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq_grok_${index + 1}`,
+    id: 'dq_grok_' + (index + 1),
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -665,14 +627,14 @@ function generateDemoQuestions(): DailyQuizQuestion[] {
     {
       id: 'demo20',
       question: 'Which scheme provides cooking gas connections to poor households?',
-      options: ['Ujjwala Yojana', 'Swachh Bharat', 'Digital India', 'Make in India'],
+      options: ['Ujjwala Yojana', 'Ayushman Bharat', 'PM-KISAN', 'Swachh Bharat'],
       correct_answer: 0,
       explanation: 'Pradhan Mantri Ujjwala Yojana provides LPG connections to women from poor households.',
       subject: 'Current Affairs',
       subtopic: 'Government Schemes',
       difficulty: 'medium',
       points: 10,
-      exam_relevance: 'Important welfare scheme for competitive exams'
+      exam_relevance: 'Important government initiative for competitive exams'
     }
   ];
 }
