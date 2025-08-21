@@ -826,12 +826,24 @@ Format as JSON array with structure:
       router.push({
         pathname: '/battle/live-quiz',
         params: { 
-          roomId: room.id,
-          isQuickBattle: 'true',
-          opponentName: opponent.name
-        }
-      });
+      // Create real battle room
+      const roomData = {
+        room_name: customTopic || selectedTopic,
+        subject_name: selectedTopic,
+        difficulty: selectedDifficulty,
+        bet_amount: betAmount,
+        max_participants: 4,
+        topic_id: null, // Will be set by backend if topic exists
+      };
 
+      const result = await SupabaseService.createBattleRoom(roomData);
+      
+      if (result.battleRoom) {
+        router.push({
+          pathname: '/battle/room',
+          params: { roomId: result.battleRoom.id },
+        });
+      }
     } catch (error) {
       console.error('Quick battle error:', error);
       setShowMatchingModal(false);
@@ -858,11 +870,13 @@ Format as JSON array with structure:
         rating: opponent.rating || 1200
       };
     } else {
-      // No real players, create bot opponent
-      const bot = await SupabaseService.makeBattleRequest('get_bot_opponent', {
-        user_rating: 1200, // Default rating
-        difficulty: selectedDifficulty
-      });
+      // Find or create quick battle
+      const battleConfig = {
+        subject_name: 'General Knowledge',
+        difficulty: 'medium',
+        bet_amount: 100,
+        max_participants: 2,
+      };
       
       return {
         id: bot.id,
