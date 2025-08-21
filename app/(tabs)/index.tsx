@@ -520,6 +520,7 @@ function EnhancedStatCard({ icon, label, value, color, trend }: {
             </View>
           )}
         </View>
+      </LinearGradient>
     </Animated.View>
   );
 }
