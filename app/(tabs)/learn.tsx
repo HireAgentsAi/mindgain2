@@ -267,58 +267,6 @@ export default function Learn() {
     }
   };
 
-  const handleCreateFromYouTube = async (config: any) => {
-    console.log('📺 LEARN - handleCreateFromYouTube called');
-    console.log('📋 Received config:', config);
-    
-    try {
-      setIsProcessing(true);
-      console.log('⏳ Processing YouTube video...');
-      
-      // Check if user is authenticated
-      const user = await SupabaseService.getCurrentUser();
-      if (!user) {
-        Alert.alert('Authentication Required', 'Please log in to create content.');
-        return;
-      }
-      
-      // Call YouTube processing edge function
-      const result = await SupabaseService.callEdgeFunction('process-youtube', config);
-      
-      console.log('✅ YouTube processing result:', result);
-      
-      const missionId = result?.mission?.id;
-      
-      if (missionId) {
-        setShowYouTubeModal(false);
-        
-        // Navigate to content viewer
-        console.log('🚀 Navigating to content viewer with ID:', missionId);
-        
-        setTimeout(() => {
-          router.push({
-            pathname: '/learn/content-viewer',
-            params: {
-              contentId: missionId,
-              contentType: 'youtube',
-              source: 'youtube-video',
-            },
-          });
-        }, 500);
-      } else {
-        throw new Error('No mission ID returned from YouTube processing');
-      }
-      
-    } catch (error) {
-      console.error('❌ Error processing YouTube video:', error);
-      Alert.alert('Error', `Failed to process video: ${(error as any)?.message || 'Unknown error'}`);
-    } finally {
-      if (isMounted.current) {
-        setIsProcessing(false);
-        console.log('⏹️ YouTube processing finished');
-      }
-    }
-  };
 
   const handleCreateFromPDF = async (config: any) => {
     console.log('📄 LEARN - handleCreateFromPDF called');
