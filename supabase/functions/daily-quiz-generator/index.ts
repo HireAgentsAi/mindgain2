@@ -178,7 +178,7 @@ async function generateDailyQuizQuestions(): Promise<DailyQuizQuestion[]> {
   console.log('OpenAI key available:', !!openaiApiKey);
   console.log('Grok key available:', !!grokApiKey);
 
-  const prompt = `Generate exactly 20 high-quality multiple-choice questions for Indian competitive exam preparation (UPSC, SSC, Banking, State PCS, Railway, etc.).
+  const prompt = \`Generate exactly 20 high-quality multiple-choice questions for Indian competitive exam preparation (UPSC, SSC, Banking, State PCS, Railway, etc.).
 
 SUBJECT DISTRIBUTION (exactly):
 - History: 4 questions (Ancient India, Medieval India, Modern India, Freedom Movement)
@@ -265,7 +265,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
       messages: [
         {
           role: 'user',
-          content: `You are an expert question setter for Indian competitive exams. ${prompt}`
+          content: \`You are an expert question setter for Indian competitive exams. ${prompt}`
         }
       ]
     }),
@@ -273,14 +273,14 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errorText}`);
+    throw new Error(\`Claude API error: ${response.status} - ${errorText}`);
   }
 
   const claudeResponse = await response.json();
   const content = JSON.parse(claudeResponse.content[0].text);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq_claude_${index + 1}`,
+    id: \`dq_claude_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -297,7 +297,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': \`Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -320,14 +320,14 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+    throw new Error(\`OpenAI API error: ${response.status} - ${errorText}`);
   }
 
   const aiResponse = await response.json();
   const content = JSON.parse(aiResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq_openai_${index + 1}`,
+    id: \`dq_openai_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -344,7 +344,7 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
   const response = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': \`Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -366,14 +366,14 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Grok API error: ${response.status} - ${errorText}`);
+    throw new Error(\`Grok API error: ${response.status} - ${errorText}`);
   }
 
   const grokResponse = await response.json();
   const content = JSON.parse(grokResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq_grok_${index + 1}`,
+    id: \`dq_grok_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
