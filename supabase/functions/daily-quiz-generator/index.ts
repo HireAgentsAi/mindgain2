@@ -279,7 +279,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
   const content = JSON.parse(claudeResponse.content[0].text);
   
   return content.questions.map((q: any, index: number) => ({
-    id: \`dq_claude_${index + 1}`,
+    id: `dq_claude_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -326,7 +326,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
   const content = JSON.parse(aiResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: \`dq_openai_${index + 1}`,
+    id: `dq_openai_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -372,7 +372,7 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
   const content = JSON.parse(grokResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: \`dq_grok_${index + 1}`,
+    id: `dq_grok_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
