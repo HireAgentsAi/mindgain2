@@ -35,6 +35,7 @@ import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import { theme } from '@/constants/theme';
 import { SupabaseService } from '@/utils/supabaseService';
 import ContentGenerationModal from '@/components/ui/ContentGenerationModal';
+import YouTubeInputModal from '@/components/ui/YouTubeInputModal';
 
 const { width } = Dimensions.get('window');
 
