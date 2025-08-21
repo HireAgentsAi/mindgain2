@@ -63,8 +63,6 @@ export default function Home() {
   });
   const [refreshing, setRefreshing] = useState(false);
   const [greeting, setGreeting] = useState('');
-  const [mascotRecommendations, setMascotRecommendations] = useState<string[]>([]);
-  const [currentRecommendation, setCurrentRecommendation] = useState(0);
 
   // Animation values
   const fadeIn = useSharedValue(0);
@@ -80,17 +78,10 @@ export default function Home() {
     loadUserData();
     setGreeting(getTimeBasedGreeting());
     startAnimations();
-    
-    // Cycle through recommendations
-    const interval = setInterval(() => {
-      setCurrentRecommendation(prev => (prev + 1) % Math.max(mascotRecommendations.length, 1));
-    }, 5000);
-    
     return () => {
       isMounted.current = false;
-      clearInterval(interval);
     };
-  }, [mascotRecommendations.length]);
+  }, []);
 
   const startAnimations = () => {
     fadeIn.value = withTiming(1, { duration: 800 });
@@ -134,9 +125,8 @@ export default function Home() {
         return;
       }
 
-      const [stats, recommendations] = await Promise.allSettled([
+      const [stats] = await Promise.allSettled([
         SupabaseService.getUserStats(user.id),
-        SupabaseService.getMascotRecommendations(user.id)
       ]);
       
       if (stats.status === 'fulfilled' && stats.value) {
@@ -148,10 +138,6 @@ export default function Home() {
           accuracy: 0, // Will be calculated from real data
           rank: 0, // Will be calculated from real data
         });
-      }
-      
-      if (recommendations.status === 'fulfilled' && recommendations.value) {
-        setMascotRecommendations(recommendations.value);
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -302,20 +288,6 @@ export default function Home() {
                 </View>
               </View>
               
-              {/* Mascot Recommendations */}
-              {mascotRecommendations.length > 0 && (
-                <View style={styles.recommendationBubble}>
-                  <LinearGradient
-                    colors={[theme.colors.background.glass, theme.colors.background.card]}
-                    style={styles.recommendationGradient}
-                  >
-                    <FontAwesome5 name="lightbulb" size={14} color={theme.colors.accent.yellow} solid />
-                    <Text style={styles.recommendationText}>
-                      {mascotRecommendations[currentRecommendation]}
-                    </Text>
-                  </LinearGradient>
-                </View>
-              )}
             </View>
 
             {/* Enhanced Progress Card */}
@@ -373,6 +345,7 @@ export default function Home() {
                   </View>
                 </View>
               </LinearGradient>
+            </LinearGradient>
             </Animated.View>
 
             {/* Enhanced Stats Grid */}
