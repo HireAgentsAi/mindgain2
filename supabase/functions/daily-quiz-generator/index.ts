@@ -264,7 +264,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
       messages: [
         {
           role: 'user',
-          content: \`You are an expert question setter for Indian competitive exams. ${prompt}`
+          content: "You are an expert question setter for Indian competitive exams. " + prompt
         }
       ]
     }),
