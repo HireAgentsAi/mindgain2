@@ -246,35 +246,50 @@ Points allocation: easy=5, medium=10, hard=15`;
 }
 
 async function generateWithClaude(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'Content-Type': 'application/json',
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 8000,
-      temperature: 0.7,
-      messages: [
-        {
-          role: 'user',
-          content: `You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.
+  try {
+    console.log('🤖 Making request to Claude API...');
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-3-5-sonnet-20241022',
+        max_tokens: 8000,
+        temperature: 0.7,
+        messages: [
+          {
+            role: 'user',
+            content: `You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.
 
 ${prompt}`
-        }
-      ]
-    }),
-  });
+          }
+        ]
+      }),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Claude API error: ${response.status} - ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Claude API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText
+      });
+      throw new Error(`Claude API error: ${response.status} - ${errorText}`);
+    }
+
+    const claudeResponse = await response.json();
+    const content = JSON.parse(claudeResponse.content[0].text);
+  } catch (fetchError) {
+    console.error('❌ Claude fetch error:', {
+      message: fetchError.message,
+      stack: fetchError.stack,
+      name: fetchError.name
+    });
+    throw new Error(`Claude API fetch failed: ${fetchError.message}`);
   }
-
-  const claudeResponse = await response.json();
-  const content = JSON.parse(claudeResponse.content[0].text);
   
   // Validate and format questions
   const questions = content.questions.map((q: any, index: number) => ({
@@ -295,37 +310,52 @@ ${prompt}`
 }
 
 async function generateWithOpenAI(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 8000,
-      response_format: { type: "json_object" }
-    }),
-  });
+  try {
+    console.log('🤖 Making request to OpenAI API...');
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 8000,
+        response_format: { type: "json_object" }
+      }),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ OpenAI API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText
+      });
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+    }
+
+    const aiResponse = await response.json();
+    const content = JSON.parse(aiResponse.choices[0].message.content);
+  } catch (fetchError) {
+    console.error('❌ OpenAI fetch error:', {
+      message: fetchError.message,
+      stack: fetchError.stack,
+      name: fetchError.name
+    });
+    throw new Error(`OpenAI API fetch failed: ${fetchError.message}`);
   }
-
-  const aiResponse = await response.json();
-  const content = JSON.parse(aiResponse.choices[0].message.content);
   
   // Validate and format questions
   const questions = content.questions.map((q: any, index: number) => ({

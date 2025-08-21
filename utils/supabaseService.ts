@@ -295,7 +295,7 @@ export class SupabaseService {
         .select('*')
         .eq('user_id', userId)
         .eq('date', today)
-        .single();
+        .maybeSingle();
 
       const dailyQuizzesTaken = usage?.daily_quizzes_taken || 0;
       const aiGenerationsUsed = usage?.ai_generations_used || 0;
