@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
+import { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Share,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -22,7 +24,6 @@ import { Trophy, Star, Clock, Target, Brain, Zap, Chrome as Home, Share2 } from 
 import { theme } from '@/constants/theme';
 import MascotAvatar from '@/components/ui/MascotAvatar';
 import GradientButton from '@/components/ui/GradientButton';
-import ShareModal from '@/components/ui/ShareModal';
 import { SupabaseService } from '@/utils/supabaseService';
 
 export default function MissionCompletionScreen() {
@@ -34,7 +35,6 @@ export default function MissionCompletionScreen() {
   const statsOpacity = useSharedValue(0);
   const confettiOpacity = useSharedValue(0);
   const buttonOpacity = useSharedValue(0);
-  const [showShareModal, setShowShareModal] = useState(false);
 
   useEffect(() => {
     // Celebration animation sequence
@@ -106,7 +106,29 @@ export default function MissionCompletionScreen() {
   };
 
   const handleShareResults = () => {
-    setShowShareModal(true);
+    handleShare();
+  };
+
+  const handleShare = async () => {
+    const shareText = `🏆 Mission Complete: ${score}% Score!
+
+⏱️ Completed in ${timeInMinutes} minutes
+🎯 All 4 learning rooms mastered
+🧠 Knowledge gained with MindGains AI
+
+Join India's #1 AI learning platform:
+📱 Download: https://mindgains.ai
+
+#MindGainsAI #MissionComplete #AILearning`;
+
+    try {
+      await Share.share({
+        message: shareText,
+        title: 'Mission Complete',
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
   };
 
   const score = parseInt(finalScore as string) || 0;
@@ -310,18 +332,6 @@ export default function MissionCompletionScreen() {
         {/* Bottom Spacing */}
         <View style={styles.bottomSpacing} />
       </ScrollView>
-      
-      {/* Share Modal */}
-      <ShareModal
-        visible={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        type="score"
-        score={{
-          percentage: score,
-          subject: 'Mission Completed',
-          timeSpent: timeInMinutes * 60
-        }}
-      />
     </LinearGradient>
   );
 }
