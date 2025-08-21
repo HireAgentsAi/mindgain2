@@ -141,7 +141,7 @@ async function generateQuizViaOpenAI(count = 10, topic?: string): Promise<DailyQ
 
   const resp = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + key },
     body: JSON.stringify({
       model: "gpt-4o-mini", // pick your model
       temperature: 0.4,
@@ -154,7 +154,7 @@ async function generateQuizViaOpenAI(count = 10, topic?: string): Promise<DailyQ
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`OpenAI error: ${resp.status} ${text}`);
+    throw new Error("OpenAI error: " + resp.status + " " + text);
   }
 
   const data = await resp.json();
@@ -164,8 +164,8 @@ async function generateQuizViaOpenAI(count = 10, topic?: string): Promise<DailyQ
 }
 
 async function generateQuizViaClaude(count = 10, topic?: string): Promise<DailyQuizQuestion[]> {
-  const key = Deno.env.get("ANTHROPIC_API_KEY");
-  if (!key) throw new Error("ANTHROPIC_API_KEY missing");
+  const key = Deno.env.get("CLAUDE_API_KEY");
+  if (!key) throw new Error("CLAUDE_API_KEY missing");
 
   const sys = "You are a strict JSON-only MCQ generator for Indian competitive exams (UPSC/SSC/TNPSC/etc).";
   const user = [
@@ -199,7 +199,7 @@ async function generateQuizViaClaude(count = 10, topic?: string): Promise<DailyQ
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Anthropic error: ${resp.status} ${text}`);
+    throw new Error("Anthropic error: " + resp.status + " " + text);
   }
 
   const data = await resp.json();
