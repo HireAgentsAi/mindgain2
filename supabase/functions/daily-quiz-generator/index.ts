@@ -108,15 +108,14 @@ Deno.serve(async (req: Request) => {
 
     if (saveError) {
       console.error('❌ Error saving quiz:', saveError);
-      // Return quiz anyway even if save fails
       return new Response(
         JSON.stringify({
-          success: true,
-          quiz: dailyQuiz,
-          message: 'Daily quiz generated (save failed but quiz available)',
-          generation_method: 'ai_generated'
+          success: false,
+          error: 'Failed to save quiz to database',
+          details: saveError.message
         }),
         {
+          status: 500,
           headers: {
             'Content-Type': 'application/json',
             ...corsHeaders,
@@ -133,7 +132,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         quiz: savedQuiz,
-        message: 'Daily quiz generated successfully with AI',
+        message: 'Daily quiz generated successfully',
         generation_method: 'ai_generated'
       }),
       {
@@ -169,6 +168,11 @@ async function generateDailyQuizWithAI(): Promise<DailyQuizQuestion[]> {
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
   const grokApiKey = Deno.env.get('GROK_API_KEY');
   
+  console.log('🔑 Checking API keys...');
+  console.log('Claude key available:', !!claudeApiKey);
+  console.log('OpenAI key available:', !!openaiApiKey);
+  console.log('Grok key available:', !!grokApiKey);
+  
   if (!claudeApiKey && !openaiApiKey && !grokApiKey) {
     console.log('⚠️ No AI API keys configured, using demo questions');
     return generateDemoQuestions();
@@ -197,13 +201,6 @@ QUESTION REQUIREMENTS:
 4. Cover recent developments and current affairs (last 6 months)
 5. Include questions on freedom fighters, constitutional articles, government schemes
 6. Ensure questions test different cognitive levels
-
-SPECIAL FOCUS AREAS:
-- Freedom fighters: Bhagat Singh, Chandrashekhar Azad, Subhas Chandra Bose
-- Constitutional articles: Article 370, Article 35A, recent amendments
-- Current schemes: PM-KISAN, Ayushman Bharat, Digital India initiatives
-- Recent achievements: Chandrayaan-3, G20 presidency, sports achievements
-- Economic policies: Budget 2024, RBI policies, GST updates
 
 Return ONLY valid JSON in this exact format:
 {
@@ -240,7 +237,7 @@ Points allocation: easy=5, medium=10, hard=15`;
       console.log('🤖 Generating questions with OpenAI...');
       return await generateWithOpenAI(universalPrompt, openaiApiKey);
     } catch (openaiError) {
-      console.log('⚠️ OpenAI failed:', openaiError.message);
+      console.log('⚠️ OpenAI failed, trying Grok:', openaiError.message);
     }
   }
 
@@ -311,32 +308,11 @@ ${prompt}`
     }));
 
     console.log('✅ Generated', questions.length, 'questions with Claude');
-    return questions.slice(0, 20); // Ensure exactly 20 questions
+    return questions.slice(0, 20);
   } catch (fetchError) {
-    console.error('❌ Claude fetch error:', {
-      message: fetchError.message,
-      stack: fetchError.stack,
-      name: fetchError.name
-    });
+    console.error('❌ Claude fetch error:', fetchError.message);
     throw new Error(`Claude API fetch failed: ${fetchError.message}`);
   }
-  
-  // Validate and format questions
-  const questions = content.questions.map((q: any, index: number) => ({
-    id: `dq${index + 1}`,
-    question: q.question,
-    options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-    correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
-    explanation: q.explanation || 'Explanation not available',
-    subject: q.subject || 'General',
-    subtopic: q.subtopic || 'General',
-    difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
-    points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
-    exam_relevance: q.exam_relevance
-  }));
-
-  console.log('✅ Generated', questions.length, 'questions with Claude');
-  return questions.slice(0, 20); // Ensure exactly 20 questions
 }
 
 async function generateWithOpenAI(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
@@ -394,7 +370,52 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
     }));
 
     console.log('✅ Generated', questions.length, 'questions with OpenAI');
-    return questions.slice(0, 20); // Ensure exactly 20 questions
+    return questions.slice(0, 20);
+  } catch (fetchError) {
+    console.error('❌ OpenAI fetch error:', fetchError.message);
+    throw new Error(`OpenAI API fetch failed: ${fetchError.message}`);
+  }
+}
+
+async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
+  try {
+    console.log('🤖 Making request to Grok API...');
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'grok-beta',
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.'
+          },
+          {
+            role: 'user',
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 8000,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Grok API error response:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText
+      });
+      throw new Error(`Grok API error: ${response.status} - ${errorText}`);
+    }
+
+    const grokResponse = await response.json();
+    const content = JSON.parse(grokResponse.choices[0].message.content);
+    
     // Validate and format questions
     const questions = content.questions.map((q: any, index: number) => ({
       id: `dq${index + 1}`,
@@ -409,67 +430,12 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
       exam_relevance: q.exam_relevance
     }));
 
-    console.log('✅ Generated', questions.length, 'questions with OpenAI');
-    return questions.slice(0, 20); // Ensure exactly 20 questions
+    console.log('✅ Generated', questions.length, 'questions with Grok');
+    return questions.slice(0, 20);
   } catch (fetchError) {
-    console.error('❌ OpenAI fetch error:', {
-      message: fetchError.message,
-      stack: fetchError.stack,
-      name: fetchError.name
-    });
-    throw new Error(`OpenAI API fetch failed: ${fetchError.message}`);
+    console.error('❌ Grok fetch error:', fetchError.message);
+    throw new Error(`Grok API fetch failed: ${fetchError.message}`);
   }
-}
-
-
-async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'grok-beta',
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly. Add a touch of wit where appropriate.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 8000,
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Grok API error: ${response.status} - ${errorText}`);
-  }
-
-  const grokResponse = await response.json();
-  const content = JSON.parse(grokResponse.choices[0].message.content);
-  
-  // Validate and format questions
-  const questions = content.questions.map((q: any, index: number) => ({
-    id: `dq${index + 1}`,
-    question: q.question,
-    options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-    correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
-    explanation: q.explanation || 'Explanation not available',
-    subject: q.subject || 'General',
-    subtopic: q.subtopic || 'General',
-    difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
-    points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
-    exam_relevance: q.exam_relevance
-  }));
-
-  console.log('✅ Generated', questions.length, 'questions with Grok');
-  return questions.slice(0, 20); // Ensure exactly 20 questions
 }
 
 function generateDemoQuestions(): DailyQuizQuestion[] {
@@ -535,7 +501,7 @@ function generateDemoQuestions(): DailyQuizQuestion[] {
       difficulty: 'easy',
       points: 5,
       exam_relevance: 'Recent achievement frequently asked in current affairs'
-    }
+    },
     {
       id: 'demo6',
       question: 'Who is known as the Father of the Indian Constitution?',
