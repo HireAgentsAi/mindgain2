@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { DailyQuizService } from './dailyQuizService';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
@@ -193,131 +194,97 @@ export class SupabaseService {
 
   static async ensureTodayQuiz(): Promise<DailyQuiz | null> {
     try {
-      console.log('🔍 Ensuring today\'s quiz exists...');
+      console.log('📅 Getting today\'s quiz using new service...');
+      const quiz = await DailyQuizService.getTodayQuiz();
       
-      // Get current date in Indian timezone
-      const indianTime = new Date().toLocaleString("en-US", {timeZone: "Asia/Kolkata"});
-      const today = new Date(indianTime).toISOString().split('T')[0];
+      if (!quiz) {
+        throw new Error('Failed to get today\'s quiz');
+      }
       
-      console.log('📅 Today\'s date (IST):', today);
-
-      // Check if quiz already exists for today
-      const { data: existingQuiz, error: checkError } = await supabase
-        .from('daily_quizzes')
-        .select('*')
-        .eq('date', today)
-        .eq('is_active', true)
-        .maybeSingle();
-
-      if (checkError) {
-        console.error('❌ Error checking existing quiz:', checkError);
-      }
-
-      if (existingQuiz && existingQuiz.questions && Array.isArray(existingQuiz.questions) && existingQuiz.questions.length > 0) {
-        console.log('✅ Found existing quiz with', existingQuiz.questions.length, 'questions');
-        return existingQuiz;
-      }
-
-      console.log('🤖 No valid quiz found, generating new one...');
-
-      // Generate new quiz using edge function
-      const { data: generatedQuiz, error: generateError } = await supabase.functions.invoke('daily-quiz-generator', {
-        body: { 
-          force: true,
-          date: today 
-        }
-      });
-
-      if (generateError) {
-        console.error('❌ Edge function error:', generateError);
-        throw new Error(`Quiz generation failed: ${generateError.message}`);
-      }
-
-      if (!generatedQuiz || !generatedQuiz.success) {
-        console.error('❌ Quiz generation failed:', generatedQuiz);
-        throw new Error(generatedQuiz?.error || 'Quiz generation failed');
-      }
-
-      console.log('✅ Quiz generated successfully:', {
-        questionsCount: generatedQuiz.quiz?.questions?.length || 0,
-        method: generatedQuiz.generation_method
-      });
-
-      return generatedQuiz.quiz;
+      console.log('✅ Quiz loaded with', quiz.questions.length, 'questions');
+      return quiz as any; // Convert to legacy format
     } catch (error) {
-      console.error('❌ Error ensuring today\'s quiz:', error);
+      console.error('❌ Error getting today\'s quiz:', error);
       throw error;
     }
   }
 
   static async submitDailyQuiz(quizId: string, answers: number[], timeSpent: number) {
     try {
-      console.log('📤 Submitting daily quiz:', { quizId, answersLength: answers.length, timeSpent });
-
-      const { data, error } = await supabase.functions.invoke('submit-daily-quiz', {
-        body: {
-          daily_quiz_id: quizId,
-          answers,
-          time_spent: timeSpent
+      const user = await this.getCurrentUser();
+      if (!user) throw new Error('User not authenticated');
+      
+      console.log('📤 Submitting quiz using new service...');
+      const result = await DailyQuizService.submitQuizAttempt(user.id, answers, timeSpent);
+      
+      console.log('✅ Quiz submitted successfully:', result);
+      
+      // Convert to legacy format
+      return {
+        success: true,
+        results: {
+          correct_answers: result.correct_answers,
+          total_questions: result.total_questions,
+          score_percentage: result.score_percentage,
+          total_points: result.total_points,
+          time_spent: result.time_spent,
+          xp_earned: result.xp_earned,
+          mascot_message: this.getMascotMessage(result.score_percentage),
+          detailed_results: [], // Will be populated if needed
         }
-      });
-
-      if (error) {
-        console.error('❌ Submit quiz error:', error);
-        throw new Error(error.message || 'Failed to submit quiz');
-      }
-
-      console.log('✅ Quiz submitted successfully:', data);
-      return data;
+      };
     } catch (error) {
-      console.error('❌ Error submitting daily quiz:', error);
-      throw error;
+      console.error('❌ Error submitting quiz:', error);
+      return {
+        success: false,
+        error: error.message || 'Failed to submit quiz'
+      };
+    }
+  }
+
+  /**
+   * Get mascot message based on score
+   */
+  private static getMascotMessage(percentage: number): string {
+    if (percentage === 100) {
+      return "🎯 Perfect score! You're basically a walking encyclopedia of Indian knowledge! Time to challenge Einstein! 🧠✨";
+    } else if (percentage >= 90) {
+      return "🌟 Outstanding! You're so smart, even Google would ask you for answers! Keep this momentum going! 🚀";
+    } else if (percentage >= 80) {
+      return "💪 Excellent work! You're crushing it like Bhagat Singh crushed the British morale! 🇮🇳";
+    } else if (percentage >= 70) {
+      return "📚 Good job! You're on the right track - just need to channel your inner Chandragupta Maurya! 👑";
+    } else if (percentage >= 60) {
+      return "🎯 Not bad! Rome wasn't built in a day, and neither was the Taj Mahal. Keep practicing! 🏛️";
+    } else if (percentage >= 50) {
+      return "🤔 Hmm, looks like you need to spend more time with books than with Netflix! But hey, we all start somewhere! 📖";
+    } else {
+      return "😅 Well, at least you showed up! That's more than what some Mughal emperors did for their empire! Try again tomorrow! 💪";
     }
   }
 
   static async checkUserLimits(userId: string) {
     try {
-      // Check user subscription
-      const { data: subscription } = await supabase
-        .from('user_subscriptions')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('status', 'active')
-        .gte('end_date', new Date().toISOString())
-        .maybeSingle();
-
-      const isPremium = !!subscription;
-
-      // Check today's usage
-      const today = new Date().toISOString().split('T')[0];
-      const { data: usage } = await supabase
-        .from('usage_tracking')
-        .select('*')
-        .eq('user_id', userId)
-        .eq('date', today)
-        .maybeSingle();
-
-      const dailyQuizzesTaken = usage?.daily_quizzes_taken || 0;
-      const aiGenerationsUsed = usage?.ai_generations_used || 0;
-
+      const limits = await DailyQuizService.checkUserLimits(userId);
+      
+      // Convert to legacy format
       return {
-        isPremium,
-        dailyLimit: isPremium ? -1 : 3,
-        dailyQuizzesTaken,
-        remaining: isPremium ? 999 : Math.max(0, 3 - dailyQuizzesTaken),
-        canTakeQuiz: isPremium || dailyQuizzesTaken < 3,
-        aiGenerationsUsed,
-        dailyAiLimit: isPremium ? -1 : 5,
-        canUseAI: isPremium || aiGenerationsUsed < 5,
+        isPremium: limits.is_premium,
+        dailyLimit: limits.daily_limit,
+        dailyQuizzesTaken: limits.attempts_today,
+        remaining: limits.remaining_attempts,
+        canTakeQuiz: limits.can_attempt,
+        aiGenerationsUsed: 0,
+        dailyAiLimit: limits.is_premium ? -1 : 5,
+        canUseAI: true,
       };
     } catch (error) {
       console.error('Error checking user limits:', error);
-      // Return permissive defaults on error
       return {
         isPremium: false,
-        dailyLimit: 3,
+        dailyLimit: 1,
         dailyQuizzesTaken: 0,
-        remaining: 3,
+        remaining: 1,
         canTakeQuiz: true,
         aiGenerationsUsed: 0,
         dailyAiLimit: 5,
