@@ -370,7 +370,7 @@ export default function BattleScreen() {
         showInviteOptions(response.battleRoom);
       }
     } catch (error) {
-      Alert.alert('Error', error.message || 'Failed to create battle room');
+      Alert.alert('Error', (error as any).message || 'Failed to create battle room');
     } finally {
       setLoading(false);
     }
@@ -826,24 +826,11 @@ Format as JSON array with structure:
       router.push({
         pathname: '/battle/live-quiz',
         params: { 
-      // Create real battle room
-      const roomData = {
-        room_name: customTopic || selectedTopic,
-        subject_name: selectedTopic,
-        difficulty: selectedDifficulty,
-        bet_amount: betAmount,
-        max_participants: 4,
-        topic_id: null, // Will be set by backend if topic exists
-      };
-
-      const result = await SupabaseService.createBattleRoom(roomData);
-      
-      if (result.battleRoom) {
-        router.push({
-          pathname: '/battle/room',
-          params: { roomId: result.battleRoom.id },
-        });
-      }
+          roomId: room.id,
+          opponentName: opponent.name,
+          isBot: opponent.isBot
+        }
+      });
     } catch (error) {
       console.error('Quick battle error:', error);
       setShowMatchingModal(false);
@@ -870,14 +857,8 @@ Format as JSON array with structure:
         rating: opponent.rating || 1200
       };
     } else {
-      // Find or create quick battle
-      const battleConfig = {
-        subject_name: 'General Knowledge',
-        difficulty: 'medium',
-        bet_amount: 100,
-        max_participants: 2,
-      };
-      
+      // Use bot opponent
+      const bot = getRandomOpponent();
       return {
         id: bot.id,
         name: bot.name,
@@ -1458,6 +1439,172 @@ Format as JSON array with structure:
     );
   };
 
+  const renderSubscriptionModal = () => {
+    return (
+      <Modal
+        visible={showSubscriptionModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowSubscriptionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <LinearGradient
+              colors={[theme.colors.background.card, theme.colors.background.tertiary]}
+              style={styles.modalGradient}
+            >
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Upgrade to Pro</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={() => setShowSubscriptionModal(false)}
+                >
+                  <FontAwesome5 name="times" size={20} color={theme.colors.text.primary} />
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScroll}>
+                <View style={styles.subscriptionContent}>
+                  <LinearGradient
+                    colors={theme.colors.gradient.primary}
+                    style={styles.proHeader}
+                  >
+                    <FontAwesome5 name="crown" size={32} color={theme.colors.text.primary} />
+                    <Text style={styles.proTitle}>MindGains Pro</Text>
+                    <Text style={styles.proSubtitle}>Unlock unlimited battle potential</Text>
+                  </LinearGradient>
+
+                  <View style={styles.featuresList}>
+                    <View style={styles.featureItem}>
+                      <FontAwesome5 name="infinity" size={16} color={theme.colors.accent.green} />
+                      <Text style={styles.featureText}>Unlimited daily battles</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <FontAwesome5 name="robot" size={16} color={theme.colors.accent.purple} />
+                      <Text style={styles.featureText}>Unlimited AI question generation</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <FontAwesome5 name="edit" size={16} color={theme.colors.accent.blue} />
+                      <Text style={styles.featureText}>Custom topics with AI moderation</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <FontAwesome5 name="medal" size={16} color={theme.colors.accent.gold} />
+                      <Text style={styles.featureText}>Premium battle rooms</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <FontAwesome5 name="chart-line" size={16} color={theme.colors.accent.cyan} />
+                      <Text style={styles.featureText}>Advanced battle analytics</Text>
+                    </View>
+                    <View style={styles.featureItem}>
+                      <FontAwesome5 name="star" size={16} color={theme.colors.accent.yellow} />
+                      <Text style={styles.featureText}>Priority matching & support</Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.pricingContainer}>
+                    <TouchableOpacity style={styles.pricingCard}>
+                      <LinearGradient
+                        colors={[theme.colors.accent.purple, theme.colors.accent.blue]}
+                        style={styles.pricingGradient}
+                      >
+                        <Text style={styles.pricingTitle}>Monthly</Text>
+                        <Text style={styles.pricingPrice}>₹99</Text>
+                        <Text style={styles.pricingSubtitle}>per month</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity style={[styles.pricingCard, styles.recommendedCard]}>
+                      <LinearGradient
+                        colors={[theme.colors.accent.gold, theme.colors.accent.yellow]}
+                        style={styles.pricingGradient}
+                      >
+                        <View style={styles.recommendedBadge}>
+                          <Text style={styles.recommendedText}>BEST VALUE</Text>
+                        </View>
+                        <Text style={styles.pricingTitle}>Yearly</Text>
+                        <Text style={styles.pricingPrice}>₹999</Text>
+                        <Text style={styles.pricingSubtitle}>Save ₹189</Text>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TouchableOpacity style={styles.upgradeButton}>
+                    <LinearGradient
+                      colors={theme.colors.gradient.primary}
+                      style={styles.upgradeButtonGradient}
+                    >
+                      <FontAwesome5 name="rocket" size={18} color={theme.colors.text.primary} />
+                      <Text style={styles.upgradeButtonText}>Upgrade Now</Text>
+                    </LinearGradient>
+                  </TouchableOpacity>
+
+                  <Text style={styles.subscriptionNote}>
+                    🎓 Special student pricing available • Cancel anytime
+                  </Text>
+                </View>
+              </ScrollView>
+            </LinearGradient>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  const renderModerationWarningModal = () => {
+    return (
+      <Modal
+        visible={showModerationWarning}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowModerationWarning(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.warningModalContent}>
+            <LinearGradient
+              colors={[theme.colors.gradient.error[0], theme.colors.gradient.error[1]]}
+              style={styles.warningHeader}
+            >
+              <FontAwesome5 name="exclamation-triangle" size={32} color={theme.colors.text.primary} />
+              <Text style={styles.warningTitle}>{moderationResult?.warning}</Text>
+            </LinearGradient>
+
+            <View style={styles.warningBody}>
+              <Text style={styles.warningMessage}>{moderationResult?.message}</Text>
+
+              {moderationResult?.suggestedTopics && (
+                <View style={styles.suggestedTopics}>
+                  <Text style={styles.suggestedTitle}>Suggested Topics:</Text>
+                  {moderationResult.suggestedTopics.map((topic: string, index: number) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.suggestedTopic}
+                      onPress={() => {
+                        setCustomTopic(topic);
+                        setShowModerationWarning(false);
+                      }}
+                    >
+                      <FontAwesome5 name="lightbulb" size={14} color={theme.colors.accent.yellow} />
+                      <Text style={styles.suggestedTopicText}>{topic}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+
+              <View style={styles.warningActions}>
+                <TouchableOpacity
+                  style={styles.warningButton}
+                  onPress={() => setShowModerationWarning(false)}
+                >
+                  <Text style={styles.warningButtonText}>Try Different Topic</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <LinearGradient
@@ -1566,173 +1713,6 @@ Format as JSON array with structure:
     </SafeAreaView>
   );
 }
-
-function renderSubscriptionModal() {
-  return (
-    <Modal
-      visible={showSubscriptionModal}
-      animationType="slide"
-      transparent
-      onRequestClose={() => setShowSubscriptionModal(false)}
-    >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <LinearGradient
-          colors={[theme.colors.background.card, theme.colors.background.tertiary]}
-          style={styles.modalGradient}
-        >
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Upgrade to Pro</Text>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={() => setShowSubscriptionModal(false)}
-            >
-              <FontAwesome5 name="times" size={20} color={theme.colors.text.primary} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView style={styles.modalScroll}>
-            <View style={styles.subscriptionContent}>
-              <LinearGradient
-                colors={theme.colors.gradient.primary}
-                style={styles.proHeader}
-              >
-                <FontAwesome5 name="crown" size={32} color={theme.colors.text.primary} />
-                <Text style={styles.proTitle}>MindGains Pro</Text>
-                <Text style={styles.proSubtitle}>Unlock unlimited battle potential</Text>
-              </LinearGradient>
-
-              <View style={styles.featuresList}>
-                <View style={styles.featureItem}>
-                  <FontAwesome5 name="infinity" size={16} color={theme.colors.accent.green} />
-                  <Text style={styles.featureText}>Unlimited daily battles</Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <FontAwesome5 name="robot" size={16} color={theme.colors.accent.purple} />
-                  <Text style={styles.featureText}>Unlimited AI question generation</Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <FontAwesome5 name="edit" size={16} color={theme.colors.accent.blue} />
-                  <Text style={styles.featureText}>Custom topics with AI moderation</Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <FontAwesome5 name="medal" size={16} color={theme.colors.accent.gold} />
-                  <Text style={styles.featureText}>Premium battle rooms</Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <FontAwesome5 name="chart-line" size={16} color={theme.colors.accent.cyan} />
-                  <Text style={styles.featureText}>Advanced battle analytics</Text>
-                </View>
-                <View style={styles.featureItem}>
-                  <FontAwesome5 name="star" size={16} color={theme.colors.accent.yellow} />
-                  <Text style={styles.featureText}>Priority matching & support</Text>
-                </View>
-              </View>
-
-              <View style={styles.pricingContainer}>
-                <TouchableOpacity style={styles.pricingCard}>
-                  <LinearGradient
-                    colors={[theme.colors.accent.purple, theme.colors.accent.blue]}
-                    style={styles.pricingGradient}
-                  >
-                    <Text style={styles.pricingTitle}>Monthly</Text>
-                    <Text style={styles.pricingPrice}>₹99</Text>
-                    <Text style={styles.pricingSubtitle}>per month</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.pricingCard, styles.recommendedCard]}>
-                  <LinearGradient
-                    colors={[theme.colors.accent.gold, theme.colors.accent.yellow]}
-                    style={styles.pricingGradient}
-                  >
-                    <View style={styles.recommendedBadge}>
-                      <Text style={styles.recommendedText}>BEST VALUE</Text>
-                    </View>
-                    <Text style={styles.pricingTitle}>Yearly</Text>
-                    <Text style={styles.pricingPrice}>₹999</Text>
-                    <Text style={styles.pricingSubtitle}>Save ₹189</Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              </View>
-
-              <TouchableOpacity style={styles.upgradeButton}>
-                <LinearGradient
-                  colors={theme.colors.gradient.primary}
-                  style={styles.upgradeButtonGradient}
-                >
-                  <FontAwesome5 name="rocket" size={18} color={theme.colors.text.primary} />
-                  <Text style={styles.upgradeButtonText}>Upgrade Now</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <Text style={styles.subscriptionNote}>
-                🎓 Special student pricing available • Cancel anytime
-              </Text>
-            </View>
-          </ScrollView>
-        </LinearGradient>
-      </View>
-    </View>
-  </Modal>
-  );
-}
-
-function renderModerationWarningModal() {
-  return (
-    <Modal
-      visible={showModerationWarning}
-      animationType="fade"
-      transparent
-      onRequestClose={() => setShowModerationWarning(false)}
-    >
-    <View style={styles.modalOverlay}>
-      <View style={styles.warningModalContent}>
-        <LinearGradient
-          colors={[theme.colors.gradient.error[0], theme.colors.gradient.error[1]]}
-          style={styles.warningHeader}
-        >
-          <FontAwesome5 name="exclamation-triangle" size={32} color={theme.colors.text.primary} />
-          <Text style={styles.warningTitle}>{moderationResult?.warning}</Text>
-        </LinearGradient>
-
-        <View style={styles.warningBody}>
-          <Text style={styles.warningMessage}>{moderationResult?.message}</Text>
-
-          {moderationResult?.suggestedTopics && (
-            <View style={styles.suggestedTopics}>
-              <Text style={styles.suggestedTitle}>Suggested Topics:</Text>
-              {moderationResult.suggestedTopics.map((topic: string, index: number) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.suggestedTopic}
-                  onPress={() => {
-                    setCustomTopic(topic);
-                    setShowModerationWarning(false);
-                  }}
-                >
-                  <FontAwesome5 name="lightbulb" size={14} color={theme.colors.accent.yellow} />
-                  <Text style={styles.suggestedTopicText}>{topic}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          )}
-
-          <View style={styles.warningActions}>
-            <TouchableOpacity
-              style={styles.warningButton}
-              onPress={() => setShowModerationWarning(false)}
-            >
-              <Text style={styles.warningButtonText}>Try Different Topic</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </View>
-  </Modal>
-  );
-}
-
 
 const styles = StyleSheet.create({
   container: {
@@ -1880,6 +1860,7 @@ const styles = StyleSheet.create({
   },
   joinRoomSection: {
     backgroundColor: theme.colors.background.card,
+    margin: 16,
     padding: 20,
     borderRadius: 16,
     ...theme.shadows.card,
@@ -1921,6 +1902,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 16,
+    paddingHorizontal: 16,
   },
   sectionTitle: {
     fontSize: 20,
@@ -1932,6 +1914,7 @@ const styles = StyleSheet.create({
   },
   roomCard: {
     marginBottom: 16,
+    marginHorizontal: 16,
     borderRadius: 16,
     overflow: 'hidden',
   },
@@ -2021,6 +2004,7 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   createCard: {
+    margin: 16,
     padding: 32,
     borderRadius: 20,
     alignItems: 'center',
