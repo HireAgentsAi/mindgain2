@@ -30,11 +30,15 @@ import {
   Clock,
   Users,
   Award,
+  FileText,
+  Camera,
 } from 'lucide-react-native';
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import { theme } from '@/constants/theme';
 import { SupabaseService } from '@/utils/supabaseService';
 import ContentGenerationModal from '@/components/ui/ContentGenerationModal';
+import PDFUploadModal from '@/components/ui/PDFUploadModal';
+import CameraScanModal from '@/components/ui/CameraScanModal';
 
 const { width } = Dimensions.get('window');
 
@@ -70,6 +74,8 @@ export default function Learn() {
     completedLessons: 87,
   });
   const [showTextModal, setShowTextModal] = useState(false);
+  const [showPDFModal, setShowPDFModal] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const fadeIn = useSharedValue(0);
@@ -267,6 +273,22 @@ export default function Learn() {
       icon: 'play-circle',
       color: theme.colors.accent.purple,
       onPress: () => router.push('/quiz/daily'),
+    },
+    {
+      id: 'upload-pdf',
+      title: 'Upload PDF',
+      subtitle: 'Convert PDF documents to missions',
+      icon: 'file-text',
+      color: '#dc2626',
+      onPress: () => setShowPDFModal(true),
+    },
+    {
+      id: 'scan-notes',
+      title: 'Scan Notes',
+      subtitle: 'Scan handwritten or printed notes',
+      icon: 'camera',
+      color: '#059669',
+      onPress: () => setShowCameraModal(true),
     },
     {
       id: 'smart-text',
@@ -468,6 +490,24 @@ export default function Learn() {
           isLoading={isProcessing}
         />
       )}
+
+      <PDFUploadModal
+        visible={showPDFModal}
+        onClose={() => setShowPDFModal(false)}
+        onSuccess={(missionId) => {
+          setShowPDFModal(false);
+          // Navigate to mission
+        }}
+      />
+
+      <CameraScanModal
+        visible={showCameraModal}
+        onClose={() => setShowCameraModal(false)}
+        onSuccess={(missionId) => {
+          setShowCameraModal(false);
+          // Navigate to mission
+        }}
+      />
     </SafeAreaView>
   );
 }
