@@ -34,9 +34,6 @@ import {
 import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
 import { theme } from '@/constants/theme';
 import { SupabaseService } from '@/utils/supabaseService';
-import CameraScanModal from '@/components/ui/CameraScanModal';
-import PDFUploadModal from '@/components/ui/PDFUploadModal';
-import YouTubeInputModal from '@/components/ui/YouTubeInputModal';
 import ContentGenerationModal from '@/components/ui/ContentGenerationModal';
 
 const { width } = Dimensions.get('window');
@@ -72,9 +69,6 @@ export default function Learn() {
     streakDays: 15,
     completedLessons: 87,
   });
-  const [showCameraModal, setShowCameraModal] = useState(false);
-  const [showPDFModal, setShowPDFModal] = useState(false);
-  const [showYouTubeModal, setShowYouTubeModal] = useState(false);
   const [showTextModal, setShowTextModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -224,157 +218,12 @@ export default function Learn() {
       color: theme.colors.accent.green,
       onPress: () => setShowTextModal(true),
     },
-    {
-      id: 'youtube',
-      title: 'YouTube Videos',
-      subtitle: 'Convert videos into interactive learning',
-      examples: ['Khan Academy', 'Crash Course', 'Educational videos'],
-      icon: 'play',
-      color: '#FF6B35', // Custom orange color for better visibility
-      onPress: () => setShowYouTubeModal(true),
-    },
-    {
-      id: 'camera-scan',
-      title: 'Camera Scan',
-      subtitle: 'Scan books, whiteboards, or documents',
-      examples: ['Textbook pages', 'Handwritten notes', 'Whiteboards'],
-      icon: 'camera',
-      color: theme.colors.accent.blue,
-      onPress: () => setShowCameraModal(true),
-    },
-    {
-      id: 'pdf-upload',
-      title: 'PDF Upload',
-      subtitle: 'Upload documents and PDFs',
-      examples: ['Study materials', 'Research papers', 'Documents'],
-      icon: 'file',
-      color: theme.colors.accent.purple,
-      onPress: () => setShowPDFModal(true),
-    },
   ];
 
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: fadeIn.value,
     transform: [{ translateY: interpolate(fadeIn.value, [0, 1], [30, 0]) }],
   }));
-
-  const handlePDFContentExtracted = async (text: string, analysis: any, metadata: any) => {
-    try {
-      setIsProcessing(true);
-      
-      // Process and display the PDF content for user review
-      console.log('PDF content:', text);
-      console.log('PDF metadata:', metadata);
-      
-      setShowPDFModal(false);
-      
-      // Navigate to content viewer if mission was created
-      if (metadata?.missionId) {
-        router.push({
-          pathname: '/learn/content-viewer',
-          params: {
-            contentId: metadata.missionId,
-            contentType: 'pdf',
-            source: 'pdf',
-          },
-        });
-      } else {
-        // Show success message as fallback
-        const fileName = metadata?.fileMetadata?.fileName || 'Document';
-        Alert.alert(
-          'PDF Processed',
-          `Successfully extracted content from: ${fileName}`,
-          [{ text: 'OK' }]
-        );
-      }
-      
-    } catch (error) {
-      console.error('Error processing PDF content:', error);
-      Alert.alert('Error', 'Failed to process the PDF. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleTextExtracted = async (text: string, analysis: any, metadata?: any) => {
-    try {
-      setIsProcessing(true);
-      
-      // Process and display the extracted text for user review
-      console.log('Extracted text:', text);
-      console.log('Analysis:', analysis);
-      
-      // Close modals
-      setShowCameraModal(false);
-      
-      // Show success message with extracted content preview
-      Alert.alert('Text Extracted', `Successfully extracted text:\n\n${text.slice(0, 200)}${text.length > 200 ? '...' : ''}`);
-      
-    } catch (error) {
-      console.error('Error processing extracted text:', error);
-      Alert.alert('Error', 'Failed to process the content. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleContentExtracted = async (text: string, analysis: any, metadata: any) => {
-    try {
-      setIsProcessing(true);
-      
-      // Process and display the YouTube content for user review
-      console.log('YouTube content:', text);
-      console.log('Video metadata:', metadata);
-      
-      setShowYouTubeModal(false);
-      
-      // Navigate to content viewer if mission was created
-      if (metadata?.missionId) {
-        router.push({
-          pathname: '/learn/content-viewer',
-          params: {
-            contentId: metadata.missionId,
-            contentType: 'youtube',
-            source: 'youtube',
-          },
-        });
-      } else {
-        // Show success message as fallback
-        const videoTitle = metadata?.videoMetadata?.title || 'Video';
-        Alert.alert(
-          'Video Processed',
-          `Successfully extracted content from: ${videoTitle}`,
-          [{ text: 'OK' }]
-        );
-      }
-      
-    } catch (error) {
-      console.error('Error processing YouTube content:', error);
-      Alert.alert('Error', 'Failed to process the video. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleTextSubmitted = async (text: string) => {
-    try {
-      setIsProcessing(true);
-      
-      // Process the submitted text
-      console.log('Text submitted:', text);
-      
-      setShowTextModal(false);
-      
-      // Show success message with text preview
-      alert(`Successfully processed text:\n\n${text.slice(0, 200)}${text.length > 200 ? '...' : ''}`);
-      
-    } catch (error) {
-      console.error('Error processing text:', error);
-      alert('Failed to process the text. Please try again.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -549,33 +398,6 @@ export default function Learn() {
           </View>
         </ScrollView>
       </Animated.View>
-
-      {/* Camera Scan Modal */}
-      {showCameraModal && (
-        <CameraScanModal
-          visible={showCameraModal}
-          onClose={() => setShowCameraModal(false)}
-          onTextExtracted={handleTextExtracted}
-        />
-      )}
-
-      {/* PDF Upload Modal */}
-      {showPDFModal && (
-        <PDFUploadModal
-          visible={showPDFModal}
-          onClose={() => setShowPDFModal(false)}
-          onContentExtracted={handlePDFContentExtracted}
-        />
-      )}
-
-      {/* YouTube Input Modal */}
-      {showYouTubeModal && (
-        <YouTubeInputModal
-          visible={showYouTubeModal}
-          onClose={() => setShowYouTubeModal(false)}
-          onContentExtracted={handleContentExtracted}
-        />
-      )}
 
       {/* Text Input Modal */}
       {showTextModal && (
