@@ -113,65 +113,65 @@ export default function BattleRoomScreen() {
 
       setCurrentUser(user);
       
-      // Demo room data
-      const demoRoom = {
-        id: roomId,
-        name: '🏛️ History Legends Battle',
-        topic: 'Freedom Fighters',
-        subject: 'History',
-        max_players: 4,
-        status: 'waiting',
-        host_id: 'user1',
-        host_name: 'Priya Sharma',
-        created_at: new Date().toISOString(),
-      };
+      // Get real battle room data
+      const battleRoomData = await SupabaseService.getBattleRoomDetails(roomId as string);
       
-      const demoPlayers: BattlePlayer[] = [
-        {
-          id: 'p1',
-          user_id: 'user1',
-          full_name: 'Priya Sharma',
-          score: 0,
-          current_question: 0,
-          is_ready: true,
-          is_host: true,
-          status: 'ready',
-          level: 12,
-          streak_days: 15,
-        },
-        {
-          id: 'p2',
-          user_id: user.id,
-          full_name: user.email?.split('@')[0] || 'You',
-          score: 0,
-          current_question: 0,
-          is_ready: false,
-          is_host: false,
-          status: 'waiting',
-          level: 8,
-          streak_days: 7,
-        },
-        {
-          id: 'p3',
-          user_id: 'user3',
-          full_name: 'Rahul Kumar',
-          score: 0,
-          current_question: 0,
-          is_ready: false,
-          is_host: false,
-          status: 'waiting',
-          level: 10,
-          streak_days: 12,
-        },
-      ];
+      if (!battleRoomData.room) {
+        throw new Error('Battle room not found');
+      }
+
+      const realRoom = {
+        id: battleRoomData.room.id,
+        name: battleRoomData.room.name,
+        topic: battleRoomData.room.subject_name || 'General Knowledge',
+        subject: battleRoomData.room.subject_name || 'General',
+        max_players: battleRoomData.room.max_participants,
+        status: battleRoomData.room.status,
+        host_id: battleRoomData.room.host_id,
+        host_name: battleRoomData.room.profiles?.full_name || 'Host',
+        created_at: battleRoomData.room.created_at,
+      };
+
+      // Get real players with user stats
+      const realPlayers: BattlePlayer[] = await Promise.all(
+        battleRoomData.participants.map(async (participant: any) => {
+          const userStats = await SupabaseService.getUserStats(participant.user_id);
+          
+          return {
+            id: participant.id,
+            user_id: participant.user_id,
+            full_name: participant.profiles?.full_name || 'Player',
+            score: participant.current_score || 0,
+            current_question: 0,
+            is_ready: false, // Will be updated by real-time subscriptions
+            is_host: participant.user_id === battleRoomData.room.host_id,
+            status: 'waiting' as const,
+            level: userStats?.current_level || 1,
+            streak_days: userStats?.streak_days || 0,
+          };
+        })
+      );
       
       if (!isMounted.current) return;
-      setRoom(demoRoom);
-      setPlayers(demoPlayers);
-      setIsHost(demoRoom.host_id === user.id);
+      setRoom(realRoom);
+      setPlayers(realPlayers);
+      setIsHost(realRoom.host_id === user.id);
       setRoomCode(roomId?.toString().slice(-6).toUpperCase() || 'ABC123');
+
+      // Subscribe to real-time updates
+      const subscription = SupabaseService.subscribeToBattleRoom(roomId as string, (payload) => {
+        console.log('🔄 Battle room update:', payload);
+        // Handle real-time updates here
+      });
+
+      return () => {
+        subscription.unsubscribe();
+      };
     } catch (error) {
       console.error('Error loading battle room:', error);
+      if (!isMounted.current) return;
+      Alert.alert('Error', 'Failed to load battle room. Please try again.');
+      router.back();
     } finally {
       if (!isMounted.current) return;
       setIsLoading(false);

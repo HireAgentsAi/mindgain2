@@ -106,7 +106,7 @@ export default function DailyQuizScreen() {
     try {
       if (!isMounted.current) return;
       
-      console.log('📱 Loading daily quiz...', { supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL });
+      console.log('📱 Loading daily quiz...');
       
       // Check authentication first
       const user = await SupabaseService.getCurrentUser();
@@ -137,37 +137,19 @@ export default function DailyQuizScreen() {
         return;
       }
 
-      // Get today's quiz (will generate if doesn't exist)
-      console.log('🔍 Calling ensureTodayQuiz...');
+      // Get or generate today's quiz
       const dailyQuiz = await SupabaseService.ensureTodayQuiz();
       
-      console.log('📋 Quiz retrieval result:', {
-        quizExists: !!dailyQuiz,
-        questionsCount: dailyQuiz?.questions?.length || 0,
-        quizId: dailyQuiz?.id || 'No ID',
-        quizDate: dailyQuiz?.date || 'No date'
-      });
-      
       if (!dailyQuiz) {
-        console.error('❌ No quiz returned from ensureTodayQuiz');
         throw new Error('Failed to load or generate daily quiz');
       }
       
       if (!dailyQuiz.questions || !Array.isArray(dailyQuiz.questions) || dailyQuiz.questions.length === 0) {
-        console.error('❌ Quiz has no questions:', {
-          hasQuestions: !!dailyQuiz.questions,
-          isArray: Array.isArray(dailyQuiz.questions),
-          length: dailyQuiz.questions?.length || 0
-        });
         throw new Error('Quiz has no questions');
       }
       
       if (!isMounted.current) return;
-      console.log('✅ Daily quiz loaded:', {
-        questionsCount: dailyQuiz.questions?.length || 0,
-        firstQuestion: dailyQuiz.questions?.[0]?.question || 'No question',
-        subjects: dailyQuiz.subjects_covered || []
-      });
+      console.log('✅ Daily quiz loaded with', dailyQuiz.questions?.length || 0, 'questions');
       
       setQuiz(dailyQuiz);
       setUserAnswers(new Array(dailyQuiz.questions?.length || 0).fill(-1));
@@ -176,7 +158,7 @@ export default function DailyQuizScreen() {
       if (!isMounted.current) return;
       Alert.alert(
         'Quiz Loading Error', 
-        `Failed to load daily quiz: ${error.message}. Please check your internet connection and try again.`,
+        'Failed to load daily quiz. Please check your internet connection and try again.',
         [
           { text: 'Retry', onPress: () => loadDailyQuiz() },
           { text: 'Go Back', onPress: () => router.back() }
@@ -234,8 +216,6 @@ export default function DailyQuizScreen() {
     setIsSubmitting(true);
     
     try {
-      console.log('📤 Submitting daily quiz...');
-      
       const user = await SupabaseService.getCurrentUser();
       if (!user) {
         if (!isMounted.current) return;
@@ -248,28 +228,11 @@ export default function DailyQuizScreen() {
       ).length;
       const percentage = Math.round((correctCount / quiz.questions.length) * 100);
       
-      console.log('📊 Calculating results...', {
-        correctCount,
-        totalQuestions: quiz.questions.length,
-        percentage,
-        timeSpent
-      });
-      
-      // Submit quiz results
-      console.log('🚀 Calling submitDailyQuiz with:', {
-        quizId: quiz.id,
-        answersLength: userAnswers.length,
-        timeSpent
-      });
-      
       const submitResult = await SupabaseService.submitDailyQuiz(quiz.id, userAnswers, timeSpent);
-      
-      console.log('📤 Submit result:', submitResult);
       
       if (!isMounted.current) return;
       
       if (submitResult.success && submitResult.results) {
-        console.log('✅ Quiz submitted successfully with results');
         setResults(submitResult.results);
         
         // Show success message
@@ -279,14 +242,11 @@ export default function DailyQuizScreen() {
           [{ text: 'View Results', onPress: () => {} }]
         );
       } else {
-        console.log('⚠️ Quiz submission failed, error:', submitResult.error);
         throw new Error(submitResult.error || 'Submission failed');
       }
       
       setIsCompleted(true);
     } catch (error) {
-      console.error('❌ Error submitting quiz:', error);
-      
       if (!isMounted.current) return;
       
       // Create local results as fallback

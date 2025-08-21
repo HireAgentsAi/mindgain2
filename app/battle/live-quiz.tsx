@@ -129,83 +129,36 @@ export default function LiveQuizScreen() {
         return;
       }
 
-      // Generate demo questions for the battle
-      const demoQuestions: LiveQuizQuestion[] = [
-        {
-          id: 'lq1',
-          question: 'Who was known as the "Lion of Punjab"?',
-          options: ['Bhagat Singh', 'Lala Lajpat Rai', 'Udham Singh', 'Kartar Singh'],
-          correct_answer: 1,
-          explanation: 'Lala Lajpat Rai was known as the "Lion of Punjab" for his fearless leadership.',
-          difficulty: 'medium',
-          points: 10,
-        },
-        {
-          id: 'lq2',
-          question: 'Which Article abolishes untouchability?',
-          options: ['Article 14', 'Article 15', 'Article 17', 'Article 21'],
-          correct_answer: 2,
-          explanation: 'Article 17 of the Indian Constitution abolishes untouchability.',
-          difficulty: 'easy',
-          points: 5,
-        },
-        {
-          id: 'lq3',
-          question: 'What is the capital of Himachal Pradesh?',
-          options: ['Shimla', 'Dharamshala', 'Manali', 'Kullu'],
-          correct_answer: 0,
-          explanation: 'Shimla is the capital city of Himachal Pradesh.',
-          difficulty: 'easy',
-          points: 5,
-        },
-        {
-          id: 'lq4',
-          question: 'Which mission landed on Moon\'s south pole in 2023?',
-          options: ['Chandrayaan-2', 'Chandrayaan-3', 'Mangalyaan', 'Aditya-L1'],
-          correct_answer: 1,
-          explanation: 'Chandrayaan-3 successfully landed on the Moon\'s south pole in August 2023.',
-          difficulty: 'medium',
-          points: 10,
-        },
-        {
-          id: 'lq5',
-          question: 'Who is the current Chief Justice of India (2024)?',
-          options: ['DY Chandrachud', 'NV Ramana', 'SA Bobde', 'Ranjan Gogoi'],
-          correct_answer: 0,
-          explanation: 'Justice DY Chandrachud is the current Chief Justice of India.',
-          difficulty: 'hard',
-          points: 15,
-        },
-      ];
+      // Get real battle room data
+      const battleRoomData = await SupabaseService.getBattleRoomDetails(roomId as string);
       
-      // Demo players
-      const demoPlayers: BattlePlayer[] = [
-        {
-          id: 'p1',
-          user_id: user.id,
-          full_name: user.email?.split('@')[0] || 'You',
-          score: 0,
-          is_current_user: true,
-        },
-        {
-          id: 'p2',
-          user_id: 'user2',
-          full_name: 'Priya Sharma',
-          score: 0,
-        },
-        {
-          id: 'p3',
-          user_id: 'user3',
-          full_name: 'Rahul Kumar',
-          score: 0,
-        },
-      ];
+      if (!battleRoomData.room) {
+        throw new Error('Battle room not found');
+      }
+
+      // Get questions from battle room
+      const battleQuestions = battleRoomData.room.questions || [];
+      if (battleQuestions.length === 0) {
+        throw new Error('No questions available for this battle');
+      }
+
+      // Get real players from participants
+      const realPlayers: BattlePlayer[] = battleRoomData.participants.map((participant: any) => ({
+        id: participant.id,
+        user_id: participant.user_id,
+        full_name: participant.profiles?.full_name || 'Player',
+        score: participant.current_score || 0,
+        is_current_user: participant.user_id === user.id,
+      }));
       
       if (!isMounted.current) return;
-      setQuestions(demoQuestions);
-      setPlayers(demoPlayers);
+      setQuestions(battleQuestions);
+      setPlayers(realPlayers);
     } catch (error) {
       console.error('Error loading live quiz:', error);
+      if (!isMounted.current) return;
+      Alert.alert('Error', 'Failed to load battle data. Please try again.');
+      router.back();
     } finally {
       if (!isMounted.current) return;
       setIsLoading(false);
