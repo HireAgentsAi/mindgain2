@@ -296,7 +296,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': \`Bearer ${apiKey}`,
+      'Authorization': 'Bearer ' + apiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -319,7 +319,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(\`OpenAI API error: ${response.status} - ${errorText}`);
+    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
   }
 
   const aiResponse = await response.json();
@@ -343,7 +343,7 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
   const response = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': \`Bearer ${apiKey}`,
+      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -365,7 +365,7 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(\`Grok API error: ${response.status} - ${errorText}`);
+    throw new Error(`Grok API error: ${response.status} - ${errorText}`);
   }
 
   const grokResponse = await response.json();
