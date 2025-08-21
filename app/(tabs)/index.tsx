@@ -506,7 +506,7 @@ function EnhancedStatCard({ icon, label, value, color, trend }: {
       >
         <View style={[styles.statIcon, { backgroundColor: color + '30' }]}>
           <FontAwesome5 name={icon} size={20} color={color} solid />
-        </View>
+        const [statsResult, coinsResult] = results;
         
         <View style={styles.statContent}>
           <Text style={styles.statValue}>{value}</Text>
