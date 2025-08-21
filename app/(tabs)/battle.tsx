@@ -72,7 +72,7 @@ export default function BattleScreen() {
   const [showTopicModal, setShowTopicModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [battleRooms, setBattleRooms] = useState<BattleRoom[]>([]);
-  const [userCoins, setUserCoins] = useState<UserCoins>({ balance: 0, total_earned: 0, total_spent: 0 });
+  const [userCoins, setUserCoins] = useState<UserCoins>({ balance: 5000, total_earned: 0, total_spent: 0 });
   const [topics, setTopics] = useState<Topic[]>([]);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [customTopic, setCustomTopic] = useState('');
@@ -1465,7 +1465,7 @@ Format as JSON array with structure:
             
             <Animated.View style={[styles.coinsContainer, { transform: [{ scale: coinsAnim }] }]}>
               <FontAwesome5 name="coins" size={20} color={theme.colors.accent.gold} />
-              <Text style={styles.coinsText}>{userCoins.balance.toLocaleString()}</Text>
+              <Text style={styles.coinsText}>{(userCoins?.balance || 0).toLocaleString()}</Text>
             </Animated.View>
           </View>
           
