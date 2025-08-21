@@ -1,3 +1,4 @@
+```typescript
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
@@ -58,7 +59,7 @@ Deno.serve(async (req: Request) => {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (checkError && checkError.code !== 'PGRST116') {
+    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means "no rows"
       console.error('❌ Database check error:', checkError);
       throw checkError;
     }
@@ -172,7 +173,7 @@ async function generateDailyQuizQuestions(): Promise<DailyQuizQuestion[]> {
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
   const grokApiKey = Deno.env.get('GROK_API_KEY');
   
-  console.log('🔑 Checking API keys...');
+  console.log('🔑 Checking AI API keys...');
   console.log('Claude key available:', !!claudeApiKey);
   console.log('OpenAI key available:', !!openaiApiKey);
   console.log('Grok key available:', !!grokApiKey);
@@ -196,6 +197,7 @@ Return ONLY valid JSON in this exact format:
 {
   "questions": [
     {
+      "id": "unique_id_string",
       "question": "Clear, exam-focused question text",
       "options": ["Option A", "Option B", "Option C", "Option D"],
       "correct_answer": 0,
@@ -215,7 +217,8 @@ Points allocation: easy=5, medium=10, hard=15`;
   if (claudeApiKey) {
     try {
       console.log('🤖 Generating questions with Claude...');
-      return await generateWithClaude(prompt, claudeApiKey);
+      const questions = await generateWithClaude(prompt, claudeApiKey);
+      if (questions.length === 20) return questions;
     } catch (error) {
       console.log('⚠️ Claude failed:', error.message);
     }
@@ -225,7 +228,8 @@ Points allocation: easy=5, medium=10, hard=15`;
   if (openaiApiKey) {
     try {
       console.log('🤖 Generating questions with OpenAI...');
-      return await generateWithOpenAI(prompt, openaiApiKey);
+      const questions = await generateWithOpenAI(prompt, openaiApiKey);
+      if (questions.length === 20) return questions;
     } catch (error) {
       console.log('⚠️ OpenAI failed:', error.message);
     }
@@ -235,7 +239,8 @@ Points allocation: easy=5, medium=10, hard=15`;
   if (grokApiKey) {
     try {
       console.log('🤖 Generating questions with Grok...');
-      return await generateWithGrok(prompt, grokApiKey);
+      const questions = await generateWithGrok(prompt, grokApiKey);
+      if (questions.length === 20) return questions;
     } catch (error) {
       console.log('⚠️ Grok failed:', error.message);
     }
@@ -275,7 +280,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
   const content = JSON.parse(claudeResponse.content[0].text);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq${index + 1}`,
+    id: `dq_claude_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -322,7 +327,7 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
   const content = JSON.parse(aiResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq${index + 1}`,
+    id: `dq_openai_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -368,7 +373,7 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
   const content = JSON.parse(grokResponse.choices[0].message.content);
   
   return content.questions.map((q: any, index: number) => ({
-    id: `dq${index + 1}`,
+    id: `dq_grok_${index + 1}`,
     question: q.question,
     options: q.options,
     correct_answer: q.correct_answer,
@@ -627,3 +632,4 @@ function generateDemoQuestions(): DailyQuizQuestion[] {
     }
   ];
 }
+```
