@@ -1,5 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,7 +10,7 @@ interface MascotRequest {
   userId: string;
 }
 
-serve(async (req) => {
+Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
@@ -95,11 +94,21 @@ async function generateRecommendations(userStats: any, userMemory: any[], recent
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY')
   
   if (!openaiApiKey) {
-    // Fallback recommendations
+    console.log('OpenAI API key not found, using fallback recommendations')
     return [
       {
-        text: "Ready for today's quiz? Let's boost your knowledge! 🚀",
+        text: "Keep up the great work! Ready for today's challenge? 🚀",
         type: "daily_motivation",
+        subject: "General"
+      },
+      {
+        text: "Your streak is building! Let's tackle some weak areas 💪",
+        type: "streak_motivation", 
+        subject: "General"
+      },
+      {
+        text: "Time for some focused practice! Pick your favorite subject 📚",
+        type: "study_tip",
         subject: "General"
       }
     ]
@@ -149,7 +158,7 @@ Return JSON:
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'gpt-4',
+      model: 'gpt-3.5-turbo',
       messages: [
         {
           role: 'system',
@@ -166,6 +175,9 @@ Return JSON:
   })
 
   if (!response.ok) {
+    console.error(`OpenAI API error: ${response.status} - ${response.statusText}`)
+    const errorText = await response.text()
+    console.error('OpenAI error details:', errorText)
     throw new Error(`OpenAI API error: ${response.status}`)
   }
 
@@ -174,7 +186,7 @@ Return JSON:
   
   return result.recommendations || [
     {
-      text: "Ready for today's quiz? Let's boost your knowledge! 🚀",
+      text: "Keep learning and growing! You're doing amazing! 🌟",
       type: "daily_motivation",
       subject: "General"
     }
