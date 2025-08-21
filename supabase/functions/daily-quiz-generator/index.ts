@@ -6,6 +6,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+type Difficulty = 'easy' | 'medium' | 'hard';
+
 interface DailyQuizQuestion {
   id: string;
   question: string;
@@ -14,7 +16,7 @@ interface DailyQuizQuestion {
   explanation: string;
   subject: string;
   subtopic: string;
-  difficulty: 'easy' | 'medium' | 'hard';
+  difficulty: Difficulty;
   points: number;
   exam_relevance?: string;
 }
@@ -44,7 +46,9 @@ Deno.serve(async (req: Request) => {
       throw new Error('Supabase configuration missing');
     }
     
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false }
+    });
 
     // Check if quiz already exists for today
     const { data: existingQuiz, error: checkError } = await supabase
@@ -54,8 +58,9 @@ Deno.serve(async (req: Request) => {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (checkError) {
+    if (checkError && checkError.code !== 'PGRST116') {
       console.error('❌ Database check error:', checkError);
+      throw checkError;
     }
 
     if (existingQuiz) {
@@ -77,8 +82,8 @@ Deno.serve(async (req: Request) => {
 
     console.log('🤖 Generating new daily quiz with AI...');
 
-    // Generate 20 questions using AI
-    const questions = await generateDailyQuizWithAI();
+    // Generate questions using AI with fallback
+    const questions = await generateDailyQuizQuestions();
     
     const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
     
@@ -132,8 +137,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         quiz: savedQuiz,
-        message: 'Daily quiz generated successfully',
-        generation_method: 'ai_generated'
+        message: 'Daily quiz generated successfully'
       }),
       {
         headers: {
@@ -163,7 +167,7 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function generateDailyQuizWithAI(): Promise<DailyQuizQuestion[]> {
+async function generateDailyQuizQuestions(): Promise<DailyQuizQuestion[]> {
   const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
   const grokApiKey = Deno.env.get('GROK_API_KEY');
@@ -172,14 +176,8 @@ async function generateDailyQuizWithAI(): Promise<DailyQuizQuestion[]> {
   console.log('Claude key available:', !!claudeApiKey);
   console.log('OpenAI key available:', !!openaiApiKey);
   console.log('Grok key available:', !!grokApiKey);
-  
-  if (!claudeApiKey && !openaiApiKey && !grokApiKey) {
-    console.log('⚠️ No AI API keys configured, using demo questions');
-    return generateDemoQuestions();
-  }
 
-  // Universal prompt for Indian competitive exam daily quiz
-  const universalPrompt = `Generate exactly 20 high-quality multiple-choice questions for Indian competitive exam preparation (UPSC, SSC, Banking, State PCS, Railway, etc.).
+  const prompt = `Generate exactly 20 high-quality multiple-choice questions for Indian competitive exam preparation (UPSC, SSC, Banking, State PCS, Railway, etc.).
 
 SUBJECT DISTRIBUTION (exactly):
 - History: 4 questions (Ancient India, Medieval India, Modern India, Freedom Movement)
@@ -193,14 +191,6 @@ DIFFICULTY DISTRIBUTION (exactly):
 - Easy: 8 questions (basic facts, definitions, direct questions)
 - Medium: 8 questions (application, analysis, moderate complexity)
 - Hard: 4 questions (synthesis, evaluation, complex analysis)
-
-QUESTION REQUIREMENTS:
-1. Each question must be factually accurate and verifiable
-2. Focus on topics frequently asked in Indian competitive exams
-3. Include specific dates, names, numbers, and facts
-4. Cover recent developments and current affairs (last 6 months)
-5. Include questions on freedom fighters, constitutional articles, government schemes
-6. Ensure questions test different cognitive levels
 
 Return ONLY valid JSON in this exact format:
 {
@@ -221,221 +211,174 @@ Return ONLY valid JSON in this exact format:
 
 Points allocation: easy=5, medium=10, hard=15`;
 
-  // Try Claude first (better for Indian content)
+  // Try Claude first
   if (claudeApiKey) {
     try {
       console.log('🤖 Generating questions with Claude...');
-      return await generateWithClaude(universalPrompt, claudeApiKey);
-    } catch (claudeError) {
-      console.log('⚠️ Claude failed, trying OpenAI:', claudeError.message);
+      return await generateWithClaude(prompt, claudeApiKey);
+    } catch (error) {
+      console.log('⚠️ Claude failed:', error.message);
     }
   }
 
-  // Fallback to OpenAI
+  // Try OpenAI
   if (openaiApiKey) {
     try {
       console.log('🤖 Generating questions with OpenAI...');
-      return await generateWithOpenAI(universalPrompt, openaiApiKey);
-    } catch (openaiError) {
-      console.log('⚠️ OpenAI failed, trying Grok:', openaiError.message);
+      return await generateWithOpenAI(prompt, openaiApiKey);
+    } catch (error) {
+      console.log('⚠️ OpenAI failed:', error.message);
     }
   }
 
-  // Try Grok as final fallback
+  // Try Grok
   if (grokApiKey) {
     try {
       console.log('🤖 Generating questions with Grok...');
-      return await generateWithGrok(universalPrompt, grokApiKey);
-    } catch (grokError) {
-      console.log('⚠️ Grok failed:', grokError.message);
+      return await generateWithGrok(prompt, grokApiKey);
+    } catch (error) {
+      console.log('⚠️ Grok failed:', error.message);
     }
   }
 
-  console.log('⚠️ All AI providers failed, using demo questions');
+  console.log('⚠️ All AI providers failed or not configured, using demo questions');
   return generateDemoQuestions();
 }
 
 async function generateWithClaude(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
-  try {
-    console.log('🤖 Making request to Claude API...');
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-sonnet-20241022',
-        max_tokens: 8000,
-        temperature: 0.7,
-        messages: [
-          {
-            role: 'user',
-            content: `You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-3-5-sonnet-20241022',
+      max_tokens: 8000,
+      temperature: 0.7,
+      messages: [
+        {
+          role: 'user',
+          content: `You are an expert question setter for Indian competitive exams. ${prompt}`
+        }
+      ]
+    }),
+  });
 
-${prompt}`
-          }
-        ]
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Claude API error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
-      throw new Error(`Claude API error: ${response.status} - ${errorText}`);
-    }
-
-    const claudeResponse = await response.json();
-    const content = JSON.parse(claudeResponse.content[0].text);
-    
-    // Validate and format questions
-    const questions = content.questions.map((q: any, index: number) => ({
-      id: `dq${index + 1}`,
-      question: q.question,
-      options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-      correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
-      explanation: q.explanation || 'Explanation not available',
-      subject: q.subject || 'General',
-      subtopic: q.subtopic || 'General',
-      difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
-      points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
-      exam_relevance: q.exam_relevance
-    }));
-
-    console.log('✅ Generated', questions.length, 'questions with Claude');
-    return questions.slice(0, 20);
-  } catch (fetchError) {
-    console.error('❌ Claude fetch error:', fetchError.message);
-    throw new Error(`Claude API fetch failed: ${fetchError.message}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Claude API error: ${response.status} - ${errorText}`);
   }
+
+  const claudeResponse = await response.json();
+  const content = JSON.parse(claudeResponse.content[0].text);
+  
+  return content.questions.map((q: any, index: number) => ({
+    id: `dq${index + 1}`,
+    question: q.question,
+    options: q.options,
+    correct_answer: q.correct_answer,
+    explanation: q.explanation,
+    subject: q.subject,
+    subtopic: q.subtopic,
+    difficulty: q.difficulty,
+    points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
+    exam_relevance: q.exam_relevance
+  })).slice(0, 20);
 }
 
 async function generateWithOpenAI(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
-  try {
-    console.log('🤖 Making request to OpenAI API...');
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 8000,
-        response_format: { type: "json_object" }
-      }),
-    });
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert question setter for Indian competitive exams.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 8000,
+      response_format: { type: "json_object" }
+    }),
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ OpenAI API error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
-    }
-
-    const aiResponse = await response.json();
-    const content = JSON.parse(aiResponse.choices[0].message.content);
-    
-    // Validate and format questions
-    const questions = content.questions.map((q: any, index: number) => ({
-      id: `dq${index + 1}`,
-      question: q.question,
-      options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-      correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
-      explanation: q.explanation || 'Explanation not available',
-      subject: q.subject || 'General',
-      subtopic: q.subtopic || 'General',
-      difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
-      points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
-      exam_relevance: q.exam_relevance
-    }));
-
-    console.log('✅ Generated', questions.length, 'questions with OpenAI');
-    return questions.slice(0, 20);
-  } catch (fetchError) {
-    console.error('❌ OpenAI fetch error:', fetchError.message);
-    throw new Error(`OpenAI API fetch failed: ${fetchError.message}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
   }
+
+  const aiResponse = await response.json();
+  const content = JSON.parse(aiResponse.choices[0].message.content);
+  
+  return content.questions.map((q: any, index: number) => ({
+    id: `dq${index + 1}`,
+    question: q.question,
+    options: q.options,
+    correct_answer: q.correct_answer,
+    explanation: q.explanation,
+    subject: q.subject,
+    subtopic: q.subtopic,
+    difficulty: q.difficulty,
+    points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
+    exam_relevance: q.exam_relevance
+  })).slice(0, 20);
 }
 
 async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
-  try {
-    console.log('🤖 Making request to Grok API...');
-    const response = await fetch('https://api.x.ai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'grok-beta',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert question setter for Indian competitive exams with deep knowledge of UPSC, SSC, Banking, and State PCS patterns. You understand the Indian education system and exam requirements perfectly.'
-          },
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 8000,
-      }),
-    });
+  const response = await fetch('https://api.x.ai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'grok-beta',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert question setter for Indian competitive exams.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 8000,
+    }),
+  });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('❌ Grok API error response:', {
-        status: response.status,
-        statusText: response.statusText,
-        errorText
-      });
-      throw new Error(`Grok API error: ${response.status} - ${errorText}`);
-    }
-
-    const grokResponse = await response.json();
-    const content = JSON.parse(grokResponse.choices[0].message.content);
-    
-    // Validate and format questions
-    const questions = content.questions.map((q: any, index: number) => ({
-      id: `dq${index + 1}`,
-      question: q.question,
-      options: Array.isArray(q.options) && q.options.length === 4 ? q.options : ['Option A', 'Option B', 'Option C', 'Option D'],
-      correct_answer: typeof q.correct_answer === 'number' && q.correct_answer >= 0 && q.correct_answer <= 3 ? q.correct_answer : 0,
-      explanation: q.explanation || 'Explanation not available',
-      subject: q.subject || 'General',
-      subtopic: q.subtopic || 'General',
-      difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
-      points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
-      exam_relevance: q.exam_relevance
-    }));
-
-    console.log('✅ Generated', questions.length, 'questions with Grok');
-    return questions.slice(0, 20);
-  } catch (fetchError) {
-    console.error('❌ Grok fetch error:', fetchError.message);
-    throw new Error(`Grok API fetch failed: ${fetchError.message}`);
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Grok API error: ${response.status} - ${errorText}`);
   }
+
+  const grokResponse = await response.json();
+  const content = JSON.parse(grokResponse.choices[0].message.content);
+  
+  return content.questions.map((q: any, index: number) => ({
+    id: `dq${index + 1}`,
+    question: q.question,
+    options: q.options,
+    correct_answer: q.correct_answer,
+    explanation: q.explanation,
+    subject: q.subject,
+    subtopic: q.subtopic,
+    difficulty: q.difficulty,
+    points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
+    exam_relevance: q.exam_relevance
+  })).slice(0, 20);
 }
 
 function generateDemoQuestions(): DailyQuizQuestion[] {
