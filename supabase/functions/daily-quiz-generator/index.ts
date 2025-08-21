@@ -177,7 +177,7 @@ async function generateDailyQuizQuestions(): Promise<DailyQuizQuestion[]> {
   console.log('OpenAI key available:', !!openaiApiKey);
   console.log('Grok key available:', !!grokApiKey);
 
-  const prompt = \`Generate exactly 20 high-quality multiple-choice questions for Indian competitive exam preparation (UPSC, SSC, Banking, State PCS, Railway, etc.).
+  const prompt = `Generate exactly 20 high-quality multiple-choice questions for Indian competitive exam preparation (UPSC, SSC, Banking, State PCS, Railway, etc.).
 
 SUBJECT DISTRIBUTION (exactly):
 - History: 4 questions (Ancient India, Medieval India, Modern India, Freedom Movement)
