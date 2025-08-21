@@ -38,19 +38,22 @@ Deno.serve(async (req: Request) => {
     
     console.log('📅 Generating daily quiz for Indian date:', today);
 
-    // Initialize Supabase client
+    // Initialize Supabase client with better error handling
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
     if (!supabaseUrl || !supabaseServiceKey) {
+      console.error('❌ Missing Supabase configuration');
       throw new Error('Supabase configuration missing');
     }
     
+    console.log('🔗 Connecting to Supabase...');
     const supabase = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { persistSession: false }
     });
 
     // Check if quiz already exists for today
+    console.log('🔍 Checking for existing quiz...');
     const { data: existingQuiz, error: checkError } = await supabase
       .from('daily_quizzes')
       .select('*')
@@ -58,17 +61,18 @@ Deno.serve(async (req: Request) => {
       .eq('is_active', true)
       .maybeSingle();
 
-    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 means "no rows"
+    if (checkError && checkError.code !== 'PGRST116') {
       console.error('❌ Database check error:', checkError);
-      throw checkError;
+      throw new Error('Database check failed: ' + checkError.message);
     }
 
-    if (existingQuiz) {
-      console.log('✅ Daily quiz already exists for today');
+    if (existingQuiz && existingQuiz.questions && Array.isArray(existingQuiz.questions) && existingQuiz.questions.length > 0) {
+      console.log('✅ Found existing quiz with', existingQuiz.questions.length, 'questions');
       return new Response(
         JSON.stringify({
           success: true,
           quiz: existingQuiz,
+          generation_method: 'existing',
           message: 'Daily quiz already exists for today'
         }),
         {
@@ -80,10 +84,16 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    console.log('🤖 Generating new daily quiz with AI...');
+    console.log('🤖 No valid quiz found, generating new one...');
 
-    // Generate questions using AI with fallback
+    // Generate new questions with better error handling
     const questions = await generateDailyQuizQuestions();
+    
+    if (!questions || questions.length === 0) {
+      throw new Error('Failed to generate any questions');
+    }
+    
+    console.log('✅ Generated', questions.length, 'questions');
     
     const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
     
@@ -104,29 +114,40 @@ Deno.serve(async (req: Request) => {
 
     console.log('💾 Saving daily quiz to database...');
 
-    // Save to database
-    const { data: savedQuiz, error: saveError } = await supabase
-      .from('daily_quizzes')
-      .insert(dailyQuiz)
-      .select()
-      .single();
+    // Save to database with retry logic
+    let savedQuiz;
+    let saveAttempts = 0;
+    const maxSaveAttempts = 3;
+    
+    while (saveAttempts < maxSaveAttempts) {
+      try {
+        const { data, error } = await supabase
+          .from('daily_quizzes')
+          .insert(dailyQuiz)
+          .select()
+          .single();
 
-    if (saveError) {
-      console.error('❌ Error saving quiz:', saveError);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Failed to save quiz to database',
-          details: saveError.message
-        }),
-        {
-          status: 500,
-          headers: {
-            'Content-Type': 'application/json',
-            ...corsHeaders,
-          },
+        if (error) {
+          throw error;
         }
-      );
+        
+        savedQuiz = data;
+        break;
+      } catch (saveError) {
+        saveAttempts++;
+        console.error(`❌ Save attempt ${saveAttempts} failed:`, saveError);
+        
+        if (saveAttempts >= maxSaveAttempts) {
+          throw new Error('Failed to save quiz after multiple attempts: ' + saveError.message);
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+
+    if (!savedQuiz) {
+      throw new Error('Quiz was not saved properly');
     }
 
     console.log('🎉 Daily quiz generated and saved successfully');
@@ -137,6 +158,7 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         quiz: savedQuiz,
+        generation_method: 'ai_generated',
         message: 'Daily quiz generated successfully'
       }),
       {
@@ -150,10 +172,13 @@ Deno.serve(async (req: Request) => {
   } catch (error) {
     console.error('💥 Error in daily quiz generator:', error);
     
+    // Return a more detailed error response
     return new Response(
       JSON.stringify({
         success: false,
         error: error.message || 'Failed to generate daily quiz',
+        error_type: error.name || 'UnknownError',
+        timestamp: new Date().toISOString(),
         message: 'Daily quiz generation failed'
       }),
       {
@@ -168,14 +193,16 @@ Deno.serve(async (req: Request) => {
 });
 
 async function generateDailyQuizQuestions(): Promise<DailyQuizQuestion[]> {
+  console.log('🔑 Starting question generation...');
+  
   const claudeApiKey = Deno.env.get('CLAUDE_API_KEY');
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
   const grokApiKey = Deno.env.get('GROK_API_KEY');
   
-  console.log('🔑 Checking AI API keys...');
-  console.log('Claude key available:', !!claudeApiKey);
-  console.log('OpenAI key available:', !!openaiApiKey);
-  console.log('Grok key available:', !!grokApiKey);
+  console.log('🔑 API keys status:');
+  console.log('- Claude:', claudeApiKey ? 'Available' : 'Missing');
+  console.log('- OpenAI:', openaiApiKey ? 'Available' : 'Missing');
+  console.log('- Grok:', grokApiKey ? 'Available' : 'Missing');
 
   const prompt = `Generate exactly 20 high-quality multiple-choice questions for Indian competitive exam preparation (UPSC, SSC, Banking, State PCS, Railway, etc.).
 
@@ -212,44 +239,55 @@ Return ONLY valid JSON in this exact format:
 
 Points allocation: easy=5, medium=10, hard=15`;
 
-  // Try Claude first
+  // Try Claude first with better error handling
   if (claudeApiKey) {
     try {
-      console.log('🤖 Generating questions with Claude...');
+      console.log('🤖 Attempting generation with Claude...');
       const questions = await generateWithClaude(prompt, claudeApiKey);
-      if (questions.length === 20) return questions;
+      if (questions && questions.length >= 15) {
+        console.log('✅ Claude generated', questions.length, 'questions');
+        return questions.slice(0, 20);
+      }
     } catch (error) {
       console.log('⚠️ Claude failed:', error.message);
     }
   }
 
-  // Try OpenAI
+  // Try OpenAI with better error handling
   if (openaiApiKey) {
     try {
-      console.log('🤖 Generating questions with OpenAI...');
+      console.log('🤖 Attempting generation with OpenAI...');
       const questions = await generateWithOpenAI(prompt, openaiApiKey);
-      if (questions.length === 20) return questions;
+      if (questions && questions.length >= 15) {
+        console.log('✅ OpenAI generated', questions.length, 'questions');
+        return questions.slice(0, 20);
+      }
     } catch (error) {
       console.log('⚠️ OpenAI failed:', error.message);
     }
   }
 
-  // Try Grok
+  // Try Grok with better error handling
   if (grokApiKey) {
     try {
-      console.log('🤖 Generating questions with Grok...');
+      console.log('🤖 Attempting generation with Grok...');
       const questions = await generateWithGrok(prompt, grokApiKey);
-      if (questions.length === 20) return questions;
+      if (questions && questions.length >= 15) {
+        console.log('✅ Grok generated', questions.length, 'questions');
+        return questions.slice(0, 20);
+      }
     } catch (error) {
       console.log('⚠️ Grok failed:', error.message);
     }
   }
 
-  console.log('⚠️ All AI providers failed or not configured, using demo questions');
+  console.log('⚠️ All AI providers failed, using demo questions');
   return generateDemoQuestions();
 }
 
 async function generateWithClaude(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
+  console.log('🔵 Claude API request starting...');
+  
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -272,6 +310,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
+    console.error('❌ Claude API error:', response.status, errorText);
     throw new Error("Claude API error: " + response.status + " - " + errorText);
   }
 
@@ -289,10 +328,12 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
     difficulty: q.difficulty,
     points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
     exam_relevance: q.exam_relevance
-  })).slice(0, 20);
+  }));
 }
 
 async function generateWithOpenAI(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
+  console.log('🟢 OpenAI API request starting...');
+  
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -319,7 +360,8 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+    console.error('❌ OpenAI API error:', response.status, errorText);
+    throw new Error("OpenAI API error: " + response.status + " - " + errorText);
   }
 
   const aiResponse = await response.json();
@@ -336,14 +378,16 @@ async function generateWithOpenAI(prompt: string, apiKey: string): Promise<Daily
     difficulty: q.difficulty,
     points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
     exam_relevance: q.exam_relevance
-  })).slice(0, 20);
+  }));
 }
 
 async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQuizQuestion[]> {
+  console.log('🟡 Grok API request starting...');
+  
   const response = await fetch('https://api.x.ai/v1/chat/completions', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': 'Bearer ' + apiKey,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
@@ -365,7 +409,8 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Grok API error: ${response.status} - ${errorText}`);
+    console.error('❌ Grok API error:', response.status, errorText);
+    throw new Error("Grok API error: " + response.status + " - " + errorText);
   }
 
   const grokResponse = await response.json();
@@ -382,7 +427,7 @@ async function generateWithGrok(prompt: string, apiKey: string): Promise<DailyQu
     difficulty: q.difficulty,
     points: q.difficulty === 'easy' ? 5 : q.difficulty === 'hard' ? 15 : 10,
     exam_relevance: q.exam_relevance
-  })).slice(0, 20);
+  }));
 }
 
 function generateDemoQuestions(): DailyQuizQuestion[] {
