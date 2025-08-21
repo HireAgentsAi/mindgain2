@@ -345,7 +345,6 @@ export default function Home() {
                   </View>
                 </View>
               </LinearGradient>
-            </LinearGradient>
             </Animated.View>
 
             {/* Enhanced Stats Grid */}
