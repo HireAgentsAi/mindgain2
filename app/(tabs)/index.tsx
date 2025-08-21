@@ -139,18 +139,20 @@ export default function Home() {
         SupabaseService.getMascotRecommendations(user.id)
       ]);
       
-      if (userStats) {
+      if (stats.status === 'fulfilled' && stats.value) {
         setUserStats({
-          currentLevel: userStats.current_level,
-          totalXP: userStats.total_xp,
-          streakDays: userStats.streak_days,
+          currentLevel: stats.value.current_level,
+          totalXP: stats.value.total_xp,
+          streakDays: stats.value.streak_days,
           totalQuizzes: 0, // Will be calculated from real data
           accuracy: 0, // Will be calculated from real data
           rank: 0, // Will be calculated from real data
         });
       }
       
-      setMascotRecommendations(mascotRecs);
+      if (recommendations.status === 'fulfilled' && recommendations.value) {
+        setMascotRecommendations(recommendations.value);
+      }
     } catch (error) {
       console.error('Error loading user data:', error);
       if (!isMounted.current) return;
@@ -506,7 +508,7 @@ function EnhancedStatCard({ icon, label, value, color, trend }: {
       >
         <View style={[styles.statIcon, { backgroundColor: color + '30' }]}>
           <FontAwesome5 name={icon} size={20} color={color} solid />
-        const [statsResult, coinsResult] = results;
+        </View>
         
         <View style={styles.statContent}>
           <Text style={styles.statValue}>{value}</Text>
