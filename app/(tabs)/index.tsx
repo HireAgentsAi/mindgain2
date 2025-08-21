@@ -130,7 +130,6 @@ export default function Home() {
       
       const user = await SupabaseService.getCurrentUser();
       if (!user) {
-        if (!isMounted.current) return;
         router.replace('/auth');
         return;
       }
@@ -140,12 +139,6 @@ export default function Home() {
         SupabaseService.getMascotRecommendations(user.id)
       ]);
       
-      // Extract successful results
-      const userStats = stats.status === 'fulfilled' ? stats.value : null;
-      const mascotRecs = recommendations.status === 'fulfilled' ? recommendations.value : [];
-
-      if (!isMounted.current) return;
-
       if (userStats) {
         setUserStats({
           currentLevel: userStats.current_level,
