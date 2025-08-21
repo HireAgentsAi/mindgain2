@@ -272,7 +272,7 @@ async function generateWithClaude(prompt: string, apiKey: string): Promise<Daily
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(\`Claude API error: ${response.status} - ${errorText}`);
+    throw new Error("Claude API error: " + response.status + " - " + errorText);
   }
 
   const claudeResponse = await response.json();
